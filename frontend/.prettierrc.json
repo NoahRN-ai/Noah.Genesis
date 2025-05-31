@@ -1,0 +1,12 @@
+```json
+{
+  "semi": true,
+  "singleQuote": true,
+  "tabWidth": 2,
+  "printWidth": 88,
+  "trailingComma": "es5",
+  "jsxSingleQuote": true,
+  "bracketSpacing": true,
+  "arrowParens": "always"
+}
+```
