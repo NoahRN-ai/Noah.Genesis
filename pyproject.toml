@@ -22,6 +22,7 @@ python-dotenv = "^1.0.0"
 google-cloud-sql-connector = {extras = ["pg8000"], version = "^1.6.1"} # For Cloud SQL PostgreSQL
 pypdf = "^3.17.0" # For PDF processing in RAG pipeline
 tenacity = "^8.2.3" # For retries in LLM service
+langchain-text-splitters = "^0.0.1" # For RAG pipeline
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"

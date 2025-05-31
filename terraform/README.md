@@ -13,6 +13,7 @@ The primary goal of this Terraform setup is to provision the necessary GCP resou
 *   `networking.tf`: Defines VPC networks, subnets, firewall rules, etc.
 *   `secrets.tf`: Configures Google Cloud Secret Manager placeholders.
 *   `monitoring_logging.tf`: Sets up Cloud Logging exports and basic Cloud Monitoring dashboards.
+*   `vector_search.tf`: Configures Vertex AI Vector Search for the RAG system.
 *   `database.tf`: (To be added in Task 1.4 or if a central DB is provisioned earlier) Defines database instances (e.g., Cloud SQL for PostgreSQL for RAG).
 *   `outputs.tf`: Defines outputs from the Terraform configuration (e.g., project ID, service account emails).
 *   `README.md`: This file. Provides an overview and instructions.
