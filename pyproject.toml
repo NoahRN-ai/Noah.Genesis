@@ -23,6 +23,8 @@ google-cloud-sql-connector = {extras = ["pg8000"], version = "^1.6.1"} # For Clo
 pypdf = "^3.17.0" # For PDF processing in RAG pipeline
 tenacity = "^8.2.3" # For retries in LLM service
 langchain-text-splitters = "^0.0.1" # For RAG pipeline
+firebase-admin = "^6.3.0"
+google-cloud-secret-manager = "^2.16.0"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.4.3"
