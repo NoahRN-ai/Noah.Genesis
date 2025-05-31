@@ -2,10 +2,15 @@ from pydantic import BaseModel, Field, field_validator
 from typing import Dict, List, Optional, Any
 from datetime import datetime, timezone
 from enum import Enum
+import uuid # Added import
 
 # --- Utility ---
 def utcnow():
     return datetime.now(timezone.utc)
+
+# Utility function for default tool call ID
+def generate_default_tool_call_id():
+    return str(uuid.uuid4())
 
 # --- UserProfile ---
 class UserRole(str, Enum):
@@ -74,20 +79,22 @@ class InteractionActor(str, Enum):
     AGENT = "agent"
 
 class ToolCall(BaseModel):
-    tool_name: str
-    tool_input: Dict[str, Any]
+    name: str
+    args: Dict[str, Any]
+    id: str = Field(default_factory=generate_default_tool_call_id)
 
 class ToolResponse(BaseModel):
-    tool_name: str
-    tool_output: Dict[str, Any] # Or str, depending on how tools return data
+    tool_call_id: str # Corresponds to the 'id' of the ToolCall it's responding to
+    name: str # The name of the tool that was called
+    content: Any # The output/content from the tool execution
 
 class InteractionHistoryBase(BaseModel):
     session_id: str
     user_id: str
     actor: InteractionActor
     message_content: str
-    tool_calls: Optional[List[ToolCall]] = None
-    tool_responses: Optional[List[ToolResponse]] = None
+    tool_calls: Optional[List[ToolCall]] = None # Verified: Uses updated ToolCall
+    tool_responses: Optional[List[ToolResponse]] = None # Verified: Uses updated ToolResponse
     # timestamp will be managed by the service layer for accuracy on write
 
 class InteractionHistoryCreate(InteractionHistoryBase):
