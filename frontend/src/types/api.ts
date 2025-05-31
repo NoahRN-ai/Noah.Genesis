@@ -2,11 +2,13 @@
 // Matches backend/app/models/api_models.py and firestore_models.py where appropriate
 
 // --- General ---
-export interface UserInfo {
-  userId: string; // Firebase UID
+export interface UserInfo { // This is what AuthContext will store about the Firebase User
+  uid: string; // Firebase UID, crucial for linking to our backend UserProfile.user_id
   email?: string | null;
   displayName?: string | null;
-  // role could be fetched from our UserProfile after auth
+  photoURL?: string | null;
+  emailVerified: boolean;
+  // Add other Firebase User properties if needed by the frontend directly
 }
 
 // --- Chat API ---
@@ -23,7 +25,6 @@ export interface ChatResponsePayload {
 }
 
 // --- History API ---
-// ToolCall and ToolResponse mirror firestore_models for display
 export interface ToolCallData {
   name: string;
   args: Record<string, any>;
@@ -39,7 +40,7 @@ export interface ToolResponseData {
 export interface InteractionOutputData {
   interaction_id: string;
   session_id: string;
-  user_id: string;
+  user_id: string; // This should map to Firebase UserInfo.uid
   timestamp: string; // ISO datetime string
   actor: 'user' | 'agent';
   message_content: string;
@@ -52,11 +53,11 @@ export interface SessionHistoryResponsePayload {
   interactions: InteractionOutputData[];
 }
 
-// --- UserProfile API ---
+// --- UserProfile API (from backend) ---
 export type UserRole = 'nurse' | 'patient';
 
-export interface UserProfileData {
-  user_id: string;
+export interface UserProfileData { // Data fetched from /users/{uid}/profile
+  user_id: string; // This is our backend's user_id, which should match Firebase UID
   role: UserRole;
   display_name?: string | null;
   preferences: Record<string, any>;
@@ -65,7 +66,7 @@ export interface UserProfileData {
 }
 
 export interface UserProfileUpdatePayload {
-  role?: UserRole | null;
+  role?: UserRole | null; // Role might not be user-editable
   display_name?: string | null;
   preferences?: Record<string, any> | null;
 }
@@ -80,17 +81,17 @@ export type PatientDataLogDataType =
   | "user_document";
 
 export interface PatientDataLogCreatePayload {
-  // target_patient_user_id is a query param in the API
+  // target_patient_user_id is a query param in the backend API
   timestamp: string; // ISO datetime string
   data_type: PatientDataLogDataType;
   content: Record<string, any>;
   source?: string | null;
 }
 
-export interface PatientDataLogData {
+export interface PatientDataLogData { // Data fetched from /patient-data-logs
   log_id: string;
-  user_id: string; // Patient owner
-  created_by_user_id: string; // User who submitted
+  user_id: string; // Patient owner UID
+  created_by_user_id: string; // Submitter UID
   timestamp: string; // ISO datetime string for the event
   data_type: PatientDataLogDataType;
   content: Record<string, any>;
@@ -99,14 +100,14 @@ export interface PatientDataLogData {
   updated_at: string; // ISO datetime string for record update
 }
 
-// Used by components to structure message display
+// --- For Chat Interface Component ---
 export interface DisplayMessage {
-  id: string; // interaction_id or a client-generated ID for local messages
+  id: string;
   text: string;
-  sender: 'user' | 'agent' | 'system'; // 'system' for status messages like 'typing' or errors
-  timestamp?: Date; // Date object for easy formatting
-  isTyping?: boolean; // For agent typing indicator
-  tool_calls?: ToolCallData[] | null; // For displaying agent's intent to call tools
-  // If we want to display tool results explicitly, add here or handle within agent message text
+  sender: 'user' | 'agent' | 'system'; // System for status like 'typing' or errors
+  timestamp?: Date | string; // Store as ISO string, convert to Date for display
+  isTyping?: boolean;
+  tool_calls?: ToolCallData[] | null;
+  // Add other display-specific properties here if needed, e.g., avatar, markdown rendering status
 }
 ```
