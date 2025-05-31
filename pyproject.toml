@@ -1,0 +1,66 @@
+[tool.poetry]
+name = "noah-genesis-mvp"
+version = "0.1.0"
+description = "Project Noah Genesis MVP - AI Agent Nurse"
+authors = ["AEM Team <aem@example.com>"] # Placeholder, update as needed
+readme = "README.md"
+license = "Proprietary" # Placeholder, update as needed
+packages = [{include = "backend"}]
+
+[tool.poetry.dependencies]
+python = "^3.11" # Specify your target Python version
+google-cloud-aiplatform = "^1.40.0"
+google-cloud-firestore = "^2.14.0"
+google-cloud-storage = "^2.13.0"
+google-cloud-pubsub = "^2.18.4" # For potential future async tasks
+fastapi = "^0.104.1"
+uvicorn = {extras = ["standard"], version = "^0.24.0"}
+pydantic = "^2.5.2"
+langgraph = "^0.0.18" # Check for latest stable version
+requests = "^2.31.0"
+python-dotenv = "^1.0.0"
+google-cloud-sql-connector = {extras = ["pg8000"], version = "^1.6.1"} # For Cloud SQL PostgreSQL
+pypdf = "^3.17.0" # For PDF processing in RAG pipeline
+tenacity = "^8.2.3" # For retries in LLM service
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.3"
+pytest-mock = "^3.12.0"
+ruff = "^0.1.7" # Linter and Formatter
+black = "^23.11.0" # Ruff can use black style, but having it explicit can be useful
+pre-commit = "^3.5.0"
+httpx = "^0.25.1" # For async testing FastAPI endpoints
+
+[tool.ruff]
+# Allow Pyflakes (`F`) and Pycodestyle (`E`, `W`) codes by default.
+# Built-in: `E`, `F`, `W`, `C90`, `I`, `N`, `D`, `UP`, `ANN`, `S`, `BLE`, `FBT`, `B`, `A`, `COM`, `C4`, `DTZ`, `T10`, `EM`, `EXE`, `ISC`, `ICN`, `G`, `INP`, `PIE`, `T20`, `PYI`, `PT`, `Q`, `RSE`, `RET`, `SLF`, `SIM`, `TID`, `TCH`, `ARG`, `PTH`, `ERA`, `PD`, `PGH`, `PLC`, `PLE`, `PLR`, `PLW`, `TRY`, `NPY`
+select = ["E4", "E7", "E9", "F", "W", "I", "N", "D", "UP", "ANN", "S", "B", "A", "C4", "T10", "T20", "ARG", "SIM", "PTH", "PLC", "PLE", "PLR", "PLW", "ISC"] # Select a good base set
+ignore = ["ANN101", "ANN102", "ANN204", "D203", "D213"] # Example ignores, customize as needed
+
+line-length = 88 # Compatible with Black
+target-version = "py311"
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.ruff.lint.isort]
+known-first-party = ["backend", "frontend"] # Adjust if you have other top-level src dirs
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+
+[tool.pytest.ini_options]
+pythonpath = [".", "backend"]
+asyncio_mode = "auto"
+# Add environment variables for tests if needed, e.g., via pytest-dotenv
+# env = [
+#   "GCP_PROJECT_ID=test-project",
+# ]
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

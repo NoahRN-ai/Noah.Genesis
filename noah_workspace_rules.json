@@ -1,0 +1,45 @@
+{
+  "comment": "Noah.Genesis AI IDE Workspace Rules - Placeholder v0.1. Update based on coding-standards.md_vCurrent and project-structure.md_vCurrent.",
+  "version": "0.1",
+  "python": {
+    "version": "3.11",
+    "formatter": "ruff_format (black_style)",
+    "linter": "ruff",
+    "max_line_length": 88,
+    "docstring_style": "Google",
+    "import_order_style": "ruff_isort_profile (e.g., stdlib, third_party, first_party, local_folder)",
+    "naming_conventions": {
+      "functions": "snake_case",
+      "variables": "snake_case",
+      "classes": "PascalCase",
+      "modules": "snake_case",
+      "constants": "UPPER_SNAKE_CASE"
+    },
+    "type_hinting": "mandatory_for_functions_and_methods"
+  },
+  "terraform": {
+    "formatter": "terraform_fmt",
+    "variable_naming": "snake_case",
+    "resource_naming_prefix": "noah_mvp_"
+  },
+  "markdown": {
+    "line_wrap": "80_chars_soft"
+  },
+  "general": {
+    "file_encoding": "UTF-8",
+    "newline_at_eof": true,
+    "no_trailing_whitespace": true
+  },
+  "project_structure": {
+    "backend_app_root": "backend/app/",
+    "backend_tests_root": "backend/tests/",
+    "frontend_src_root": "frontend/src/",
+    "terraform_root": "terraform/",
+    "scripts_root": "scripts/",
+    "docs_root": "docs/"
+  },
+  "dynamous_ai_integration": {
+    "optimization_note_trigger_keywords": ["optimize", "refactor for performance", "security enhancement", "breakthrough pattern"],
+    "documentation_contribution_tag": "dynamous.ai_contribution"
+  }
+}
