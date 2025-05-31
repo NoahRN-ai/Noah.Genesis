@@ -12,14 +12,14 @@ The primary goal of this Terraform setup is to provision the necessary GCP resou
 *   `project_iam.tf`: Configures the GCP project, enables necessary APIs, defines service accounts, and sets up initial IAM policies.
 *   `networking.tf`: Defines VPC networks, subnets, firewall rules, etc.
 *   `secrets.tf`: Configures Google Cloud Secret Manager placeholders.
-*   `monitoring_logging.tf`: (To be added in Task 0.4) Sets up Cloud Logging exports and basic Cloud Monitoring dashboards.
+*   `monitoring_logging.tf`: Sets up Cloud Logging exports and basic Cloud Monitoring dashboards.
 *   `database.tf`: (To be added in Task 1.4 or if a central DB is provisioned earlier) Defines database instances (e.g., Cloud SQL for PostgreSQL for RAG).
 *   `outputs.tf`: Defines outputs from the Terraform configuration (e.g., project ID, service account emails).
 *   `README.md`: This file. Provides an overview and instructions.
 *   `project_iam.md`: Detailed documentation for IAM resources created by `project_iam.tf`.
 *   `networking.md`: Detailed documentation for networking resources.
 *   `secrets.md`: Detailed documentation for secrets management.
-*   `monitoring_logging.md`: (To be added in Task 0.4) Detailed documentation for logging and monitoring setup.
+*   `monitoring_logging.md`: Detailed documentation for logging and monitoring setup.
 
 ## Prerequisites
 
