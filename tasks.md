@@ -4,6 +4,7 @@ This document outlines identified areas for optimization, enhancement, and refac
 
 ## Task Prioritization Legend (Optional)
 
+*   **[C] Critical:** Must be addressed, major impact on security, functionality, or stability.
 *   **[P1] High:** Urgent or high-impact tasks.
 *   **[P2] Medium:** Important tasks that should be addressed in the near term.
 *   **[P3] Low:** Tasks that are beneficial but can be addressed when time permits.
@@ -46,6 +47,24 @@ Each task should ideally follow this format:
 **Priority:** [P2] Medium
 **Status:** Open
 
+**ID:** `BE-API-003`
+**Title:** Critical: Implement User ID Filtering for Session History API
+**Description:** Modify `list_interaction_history_for_session` service function (in `backend/app/services/firestore_service.py`) and its caller in the API endpoint (`backend/app/api/v1/endpoints/history.py`) to include `user_id` filtering. This ensures users can only access their own session history, preventing a critical data exposure vulnerability.
+**Category:** Backend API, Backend Services, Security
+**Type:** Bug Fix, Security
+**Affected Files/Modules:** `backend/app/api/v1/endpoints/history.py`, `backend/app/services/firestore_service.py`
+**Priority:** [C] Critical
+**Status:** Open
+
+**ID:** `BE-API-004`
+**Title:** Critical: Implement Basic Self-Logging Authorization for Patient Data
+**Description:** In the `POST /patient-data-logs` endpoint (`backend/app/api/v1/endpoints/patient_data.py`), implement an authorization check to ensure that for MVP, a user can only submit data logs for themselves (i.e., `current_user.user_id == target_patient_user_id`). This addresses a potential security gap.
+**Category:** Backend API, Security
+**Type:** Bug Fix, Security
+**Affected Files/Modules:** `backend/app/api/v1/endpoints/patient_data.py`
+**Priority:** [C] Critical
+**Status:** Open
+
 ### B. Services
     *   Tasks related to specific services like LLM interaction, database interactions, agent memory, etc.
 
@@ -70,11 +89,11 @@ Each task should ideally follow this format:
 **Status:** Open
 
 **ID:** `BE-LLM-003`
-**Title:** Externalize LLM Model Configuration
-**Description:** The LLM model name (e.g., "gemini-1.0-pro-001") is hardcoded as a default parameter. Move this and other key generation parameters (e.g., temperature, top_p, max_output_tokens if not using `DEFAULT_GENERATION_CONFIG`) to environment variables or a configuration file to allow easier updates and environment-specific settings without code changes.
-**Category:** Backend Services
+**Title:** Externalize LLM Model Configuration from `llm_service.py`
+**Description:** The LLM model name (e.g., "gemini-1.0-pro-001") is hardcoded as a default parameter in `get_llm_response`. This should be primarily sourced from `settings.DEFAULT_LLM_MODEL_NAME` (from `core/config.py`). Review `llm_service.py` to ensure it uses the centralized configuration for model name and other key generation parameters (e.g., temperature, top_p). Direct `os.getenv` calls in `llm_service.py` for `GCP_PROJECT_ID` and `VERTEX_AI_REGION` should be replaced by `settings` values.
+**Category:** Backend Services, Configuration
 **Type:** Enhancement, Refactoring
-**Affected Files/Modules:** `backend/app/services/llm_service.py`.
+**Affected Files/Modules:** `backend/app/services/llm_service.py`, `backend/app/core/config.py`
 **Priority:** [P2] Medium
 **Status:** Open
 
@@ -139,6 +158,43 @@ Each task should ideally follow this format:
 **Priority:** [P3] Low
 **Status:** Open
 
+**ID:** `BE-MEM-003`
+**Title:** Critical Bug Fix: Remove Invalid `name` Parameter from `ToolMessage`
+**Description:** The `ToolMessage` constructor in LangChain typically does not accept a `name` parameter. Remove this parameter from the `ToolMessage` instantiation in `backend/app/agent/memory.py` to prevent runtime errors.
+**Category:** Backend Services, Bug Fix
+**Type:** Bug Fix
+**Affected Files/Modules:** `backend/app/agent/memory.py`
+**Priority:** [C] Critical
+**Status:** Open
+
+**ID:** `BE-MEM-004`
+**Title:** Refine `ToolCall` Instantiation in Agent Memory
+**Description:** Consider using `langchain_core.messages.ToolCall` objects directly instead of dictionaries when constructing the `tool_calls` attribute for `AIMessage` in `backend/app/agent/memory.py`. This can improve type safety and explicitness, if compatible with the LangChain version being used.
+**Category:** Backend Services
+**Type:** Refactoring
+**Affected Files/Modules:** `backend/app/agent/memory.py`
+**Priority:** [P3] Low
+**Status:** Open
+
+**ID:** `BE-MEM-005`
+**Title:** Add Error Handling for Non-Serializable `ToolMessage.content`
+**Description:** Before saving to Firestore, ensure `ToolMessage.content` (which is stringified if originally a dict) is handled gracefully if it contains non-serializable data that might cause issues during JSON stringification or Firestore saving. Add specific error handling or data sanitization.
+**Category:** Backend Services
+**Type:** Enhancement
+**Affected Files/Modules:** `backend/app/agent/memory.py`
+**Priority:** [P2] Medium
+**Status:** Open
+
+    #### RAG Service (`backend/app/services/rag_service.py`)
+**ID:** `BE-RAG-001`
+**Title:** Standardize Configuration Sourcing in RAG Service
+**Description:** Modify `rag_service.py` to source all its configurations (e.g., `GCP_PROJECT_ID`, region, RAG-specific GCS bucket/object names, Vertex AI Index/Endpoint IDs) from the central `settings` object (`backend.app.core.config.settings`) instead of `os.getenv` directly. This requires defining these RAG-specific settings in `core/config.py`.
+**Category:** Backend Services, Configuration
+**Type:** Refactoring, Enhancement
+**Affected Files/Modules:** `backend/app/services/rag_service.py`, `backend/app/core/config.py`
+**Priority:** [P2] Medium
+**Status:** Open
+
 ### C. Data Models (`backend/app/models/`)
 
 **ID:** `BE-MOD-001`
@@ -158,6 +214,36 @@ Each task should ideally follow this format:
 **Affected Files/Modules:** `backend/app/services/firestore_service.py`.
 **Priority:** [P2] Medium
 **Status:** Open
+
+### D. Core (`backend/app/core/`)
+
+**ID:** `BE-CORE-001`
+**Title:** Critical: Ensure Robust Firebase Admin SDK Initialization
+**Description:** Verify that `initialize_firebase_admin()` (from `backend/app/core/security.py`) is reliably called once during application startup (e.g., within FastAPI's lifespan event in `backend/app/main.py`). Handle potential initialization failures robustly, possibly preventing app startup if Firebase is critical.
+**Category:** Backend Core, Reliability
+**Type:** Enhancement, Bug Fix (Potential)
+**Affected Files/Modules:** `backend/app/core/security.py`, `backend/app/main.py`
+**Priority:** [C] Critical
+**Status:** Open
+
+**ID:** `BE-CORE-002`
+**Title:** Ensure `.env.example` Includes All Mandatory Backend Variables
+**Description:** The `.env.example` file (to be created from `DEVELOPMENT.md` guidance) should list all environment variables required for the backend's local operation, especially those without defaults in `core/config.py`.
+**Category:** Backend Core, Documentation
+**Type:** Documentation
+**Affected Files/Modules:** `.env.example` (project root), `backend/app/core/config.py`
+**Priority:** [P1] High
+**Status:** Open
+
+**ID:** `BE-CORE-003`
+**Title:** Promote ADC for Production Firebase/GCP Authentication
+**Description:** In documentation and configuration (`core/config.py`), clearly recommend using Application Default Credentials (ADC) for Firebase Admin SDK and other GCP service authentication in deployed production environments, rather than relying on explicit service account key files (e.g., via `FIREBASE_ADMIN_SDK_CREDENTIALS_PATH` or `GOOGLE_APPLICATION_CREDENTIALS` pointing to a file).
+**Category:** Backend Core, Security, Configuration
+**Type:** Best Practice
+**Affected Files/Modules:** `backend/app/core/config.py`, relevant documentation.
+**Priority:** [P2] Medium
+**Status:** Open
+
 ---
 
 ## II. Frontend Enhancements & Optimizations
@@ -189,21 +275,17 @@ This can provide a smoother user experience by avoiding unnecessary sign-outs.
 **Priority:** [P3] Low
 **Status:** Open
 
-    #### Chat Service (`frontend/src/services/chatApiService.ts`)
-
-**ID:** `FE-CHAT-001`
-**Title:** Expand Chat Service Capabilities
-**Description:** The `chatApiService.ts` currently only supports sending messages. Plan and add functions for other anticipated chat functionalities, such as:
-    *   Fetching chat message history for a session.
-    *   Sending typing indicators.
-    *   Handling message read receipts (if applicable).
-    *   Support for message attachments (if planned).
-Define the corresponding API endpoints and payload types (`frontend/src/types/api.ts`) as these are developed.
-**Category:** Frontend Services
-**Type:** Enhancement, New Feature
-**Affected Files/Modules:** `frontend/src/services/chatApiService.ts`, `frontend/src/types/api.ts`, relevant backend API modules.
+**ID:** `FE-API-003`
+**Title:** Improve Error Typing in API Service Catch Blocks
+**Description:** In all API service files (e.g., `chatApiService.ts`, `historyApiService.ts`, `patientDataApiService.ts`, `userProfileApiService.ts`), refine error handling in `catch` blocks to use `axios.isAxiosError` for more type-safe access to Axios-specific error properties like `error.response?.data`.
+**Category:** Frontend Services, Code Quality
+**Type:** Refactoring
+**Affected Files/Modules:** `frontend/src/services/chatApiService.ts`, `frontend/src/services/historyApiService.ts`, `frontend/src/services/patientDataApiService.ts`, `frontend/src/services/userProfileApiService.ts`
 **Priority:** [P2] Medium
 **Status:** Open
+
+    #### Chat Service (`frontend/src/services/chatApiService.ts`)
+*(FE-CHAT-001 already exists and covers expanding capabilities including history)*
 
     #### Auth Context (`frontend/src/contexts/AuthContext.tsx`)
 
@@ -216,31 +298,116 @@ Define the corresponding API endpoints and payload types (`frontend/src/types/ap
 **Priority:** [P3] Low
 **Status:** Open
 
+**ID:** `FE-AUTH-002`
+**Title:** Critical: Review and Correct `useEffect`/`useCallback` Dependency Arrays
+**Description:** In `AuthContext.tsx`, thoroughly review and correct the dependency arrays for all `useEffect` and `useCallback` hooks (especially for `handleUserChange` and the `onFirebaseAuthStateChanged` effect). Incorrect dependencies can lead to stale closures, infinite loops, or missed updates.
+**Category:** Frontend State Management, Bug Fix
+**Type:** Bug Fix
+**Affected Files/Modules:** `frontend/src/contexts/AuthContext.tsx`
+**Priority:** [C] Critical
+**Status:** Open
+
 ### B. UI/UX
     *   (Placeholder for future UI/UX specific tasks - may not be heavily populated from this initial code review. Tasks here would typically come from design reviews or user feedback.)
 
 **ID:** `FE-UI-001`
 **Title:** Implement Global Notification System for API/Auth Errors
-**Description:** To provide better user feedback, implement a global notification system (e.g., using toast messages) that can display errors originating from API calls (`apiClient.ts`) or authentication issues (`AuthContext.tsx`). This system should be easily invokable from services or contexts.
+**Description:** To provide better user feedback, implement a global notification system (e.g., using toast messages via Mantine `notifications`) that can display errors originating from API calls (`apiClient.ts`) or authentication issues (`AuthContext.tsx`). This system should be easily invokable from services or contexts.
 **Category:** Frontend UI/UX
 **Type:** Enhancement
 **Affected Files/Modules:** New notification component/context, `frontend/src/services/apiClient.ts`, `frontend/src/contexts/AuthContext.tsx`.
 **Priority:** [P2] Medium
 **Status:** Open
+
+### C. Components & Pages
+
+**ID:** `FE-COMP-001`
+**Title:** Robust Loading Fallback Height in `App.tsx`
+**Description:** Ensure the `LoadingFallback` component used for lazy-loaded pages in `App.tsx` (and also the loader in `ProtectedRoute.tsx`) correctly fills the available height within the main content area of `AppLayout`, rather than relying on fixed `100vh` calculations that might ignore layout elements like headers.
+**Category:** Frontend Components
+**Type:** Enhancement, Bug Fix (Layout)
+**Affected Files/Modules:** `frontend/src/App.tsx`, `frontend/src/components/common/ProtectedRoute.tsx`, `frontend/src/components/common/Layout.tsx`
+**Priority:** [P2] Medium
+**Status:** Open
+
+**ID:** `FE-COMP-002`
+**Title:** Ensure `AppShell.Main` Fills Vertical Space
+**Description:** Configure `AppShell` in `Layout.tsx` and its parent elements such_that `AppShell.Main` correctly occupies the full available vertical space. This is crucial for components like `ChatPage` and loading fallbacks to render correctly without incorrect height calculations. This may involve flexbox styling on parent containers.
+**Category:** Frontend Components, Layout
+**Type:** Enhancement, Bug Fix (Layout)
+**Affected Files/Modules:** `frontend/src/components/common/Layout.tsx`, `frontend/src/styles/theme.ts`
+**Priority:** [P2] Medium
+**Status:** Open
+
+**ID:** `FE-COMP-003`
+**Title:** Optimize `useStyles` in `ChatInterface.tsx`
+**Description:** Review and optimize the `useStyles` style definition and usage within `ChatInterface.tsx`. Ensure styles are memoized or defined outside the component if static to prevent re-creation on every render, potentially improving performance.
+**Category:** Frontend Components, Optimization
+**Type:** Optimization
+**Affected Files/Modules:** `frontend/src/components/ChatInterface.tsx`
+**Priority:** [P3] Low
+**Status:** Open
+
+**ID:** `FE-PAGE-001`
+**Title:** Ensure Reliable CSS Variable for Header Height
+**Description:** The `ChatPage.tsx` and other layout calculations rely on `--app-shell-header-height`. Ensure this CSS variable is reliably defined (e.g., in global styles or via `AppLayout`) and consistently used, or replace its usage with a value from the Mantine theme.
+**Category:** Frontend Pages, Layout
+**Type:** Enhancement
+**Affected Files/Modules:** `frontend/src/pages/ChatPage.tsx`, `frontend/src/components/common/Layout.tsx`, `frontend/src/styles/theme.ts`
+**Priority:** [P2] Medium
+**Status:** Open
+
+**ID:** `FE-PAGE-002`
+**Title:** Improve Post-Registration UX on `LoginPage.tsx`
+**Description:** After successful user registration on `LoginPage.tsx`, automatically navigate the user to the main application (e.g., `/chat`). Firebase `createUserWithEmailAndPassword` signs the user in, so `AuthContext` should handle the new user state and trigger the redirect. Remove the step that switches back to login mode post-registration.
+**Category:** Frontend Pages, UX
+**Type:** Enhancement
+**Affected Files/Modules:** `frontend/src/pages/LoginPage.tsx`
+**Priority:** [P2] Medium
+**Status:** Open
+
+**ID:** `FE-PAGE-003`
+**Title:** Refine Firebase Error Message Parsing on `LoginPage.tsx`
+**Description:** Improve the parsing of Firebase error codes in `handleSubmit` and `handleGoogleSignIn` on `LoginPage.tsx` to provide more user-friendly and specific messages. Consider a helper function for mapping common error codes.
+**Category:** Frontend Pages, UX
+**Type:** Enhancement
+**Affected Files/Modules:** `frontend/src/pages/LoginPage.tsx`
+**Priority:** [P2] Medium
+**Status:** Open
+
+**ID:** `FE-PAGE-004`
+**Title:** Correct Error Variable Usage in Notifications on `LoginPage.tsx`
+**Description:** In the `catch` blocks of `handleSubmit` and `handleGoogleSignIn` on `LoginPage.tsx`, ensure the `message` in `notifications.show` uses the error object from the current `catch` block (e.g., `parsedFirebaseError`) rather than the component's `error` state, which might be stale.
+**Category:** Frontend Pages, Bug Fix
+**Type:** Bug Fix
+**Affected Files/Modules:** `frontend/src/pages/LoginPage.tsx`
+**Priority:** [P2] Medium
+**Status:** Open
+
 ---
 
-## III. Database (Firestore)
+## III. Database (Firestore & RAG Storage)
 
-*   Tasks specifically targeting Firestore usage patterns, indexing strategies (if applicable from analysis), data migration plans (if any emerge). Many Firestore items might be linked to Backend Services.
+*   Tasks specifically targeting Firestore usage patterns, indexing strategies, RAG storage, data migration plans (if any emerge).
 
 **ID:** `DB-FS-001`
 **Title:** Review Firestore Indexing Strategy
-**Description:** As the application scales and query patterns become more diverse, review Firestore indexing. While Firestore auto-indexes many queries, complex queries or specific ordering/filtering might require composite indexes. Analyze common query patterns from `firestore_service.py` and `memory.py` and define necessary composite indexes in `firestore.indexes.json` (or via Terraform if preferred).
+**Description:** As the application scales and query patterns become more diverse, review Firestore indexing. While Firestore auto-indexes many queries, complex queries or specific ordering/filtering might require composite indexes. Analyze common query patterns from `firestore_service.py` and `memory.py` and define necessary composite indexes in `firestore.indexes.json` (or via Terraform if preferred). *Update: This task should also include documenting these indexes and ensuring a process for their creation, possibly via Terraform or clear manual steps in `services/README.md`.*
 **Category:** Database
-**Type:** Optimization, Enhancement
-**Affected Files/Modules:** `backend/app/services/firestore_service.py`, `backend/app/agent/memory.py`, Firestore console/config.
-**Priority:** [P3] Low
+**Type:** Optimization, Enhancement, Documentation
+**Affected Files/Modules:** `backend/app/services/firestore_service.py`, `backend/app/agent/memory.py`, Firestore console/config, `backend/app/services/README.md`
+**Priority:** [P2] Medium *(was P3, increased due to documentation need)*
 **Status:** Open
+
+**ID:** `DB-RAG-001`
+**Title:** Critical Infrastructure: Ensure Firestore Composite Indexes for RAG
+**Description:** Based on queries in `firestore_service.py` (especially those that might be used by RAG for metadata or history), ensure all necessary Firestore composite indexes are documented in `backend/app/services/README.md` and a process exists for their creation (manual or Terraform). This is critical for performance.
+**Category:** Database, DevOps
+**Type:** Performance, Documentation
+**Affected Files/Modules:** `backend/app/services/README.md`, `backend/app/services/firestore_service.py`, Terraform files if used for index management.
+**Priority:** [C] Critical
+**Status:** Open
+
 ---
 
 ## IV. DevOps & Developer Experience
@@ -267,25 +434,46 @@ Define the corresponding API endpoints and payload types (`frontend/src/types/ap
 
 **ID:** `DV-BUILD-003`
 **Title:** Enhance Makefile for More Workflows
-**Description:** The `Makefile` provides good basic commands. Consider enhancing it with:
-    *   A target to run backend and frontend dev servers concurrently (e.g., using `concurrently` or simple backgrounding).
-    *   Targets for common deployment tasks (if applicable, e.g., deploying to Cloud Run).
+**Description:** The `Makefile` provides good basic commands. Enhance it with:
+    *   A target to run backend and frontend dev servers concurrently.
+    *   Targets for common deployment tasks (if applicable).
     *   Targets for cleaning frontend build artifacts.
+    *   Targets for common Terraform commands (init, plan, apply, destroy).
+    *   Target to run the RAG pipeline script.
+    *   Update `make help` with new commands.
+    *   Consider a less aggressive default `clean` target (not removing `.venv`).
 **Category:** DevOps
 **Type:** Enhancement
 **Affected Files/Modules:** `Makefile`.
+**Priority:** [P2] Medium *(was P3, increased with more items)*
+**Status:** Open
+
+**ID:** `DV-BUILD-004`
+**Title:** Investigate/Update Backend `POETRY_VERSION` in Dockerfile
+**Description:** The `backend/Dockerfile` specifies `POETRY_VERSION=1.7.1`. Investigate if a newer stable version is available and update if beneficial.
+**Category:** DevOps, Dependencies
+**Type:** Maintenance
+**Affected Files/Modules:** `backend/Dockerfile`
 **Priority:** [P3] Low
 **Status:** Open
 
+**ID:** `DV-BUILD-005`
+**Title:** Schedule Regular Checks for Backend Base Image Vulnerabilities
+**Description:** The `backend/Dockerfile` uses `python:3.11-slim`. Schedule regular (e.g., monthly or on new base image releases) checks for known vulnerabilities in this base image and update as necessary.
+**Category:** DevOps, Security
+**Type:** Maintenance
+**Affected Files/Modules:** `backend/Dockerfile`
+**Priority:** [P2] Medium
+**Status:** Open
+
 ### B. Infrastructure (`terraform/`)
-    *   (Tasks in this section are based on file names and general best practices as content wasn't deeply analyzed)
 
 **ID:** `DV-INFRA-001`
-**Title:** Add Detailed READMEs for Terraform Modules
-**Description:** For each Terraform directory/module (e.g., `networking`, `project_iam`, `secrets`, `monitoring_logging`), create a `README.md` file. This README should explain the purpose of the module, its inputs (variables), outputs, and any important considerations or dependencies.
+**Title:** Add Detailed READMEs for All Terraform Files
+**Description:** Create/update detailed `README.md` files for each main Terraform functional area (e.g., `networking.md`, `project_iam.md`, `secrets.md`, `monitoring_logging.md`, `vector_search.md`). Ensure they explain the purpose, resources created, inputs, outputs, and any important operational considerations. *(Partially covered by existing .md files, ensure all .tf files have corresponding detailed .md)*
 **Category:** DevOps, Documentation
 **Type:** Enhancement
-**Affected Files/Modules:** All directories within `terraform/`.
+**Affected Files/Modules:** All files in `terraform/`.
 **Priority:** [P2] Medium
 **Status:** Open
 
@@ -307,26 +495,112 @@ Define the corresponding API endpoints and payload types (`frontend/src/types/ap
 **Priority:** [P2] Medium
 **Status:** Open
 
+**ID:** `DV-INFRA-004`
+**Title:** Critical: Update/Parameterize Terraform Dashboard & Alert Placeholders
+**Description:** The `google_monitoring_dashboard` in `terraform/monitoring_logging.tf` and the example alert policy use placeholder service names. These must be updated with actual deployed resource names or parameterized using Terraform variables/outputs to be effective.
+**Category:** DevOps, Infrastructure
+**Type:** Bug Fix, Configuration
+**Affected Files/Modules:** `terraform/monitoring_logging.tf`
+**Priority:** [C] Critical
+**Status:** Open
+
+**ID:** `DV-INFRA-005`
+**Title:** Configure Notification Channels for Terraform Alerts
+**Description:** Create `google_monitoring_notification_channel` resources and link them to alert policies in `terraform/monitoring_logging.tf` to ensure alerts are actionable.
+**Category:** DevOps, Infrastructure
+**Type:** Configuration
+**Affected Files/Modules:** `terraform/monitoring_logging.tf`
+**Priority:** [P1] High
+**Status:** Open
+
+**ID:** `DV-INFRA-006`
+**Title:** Critical: Parameterize Subnet IP CIDR Range in Terraform
+**Description:** The `ip_cidr_range` in `terraform/networking.tf` is hardcoded. Change this to use a variable defined in `terraform/variables.tf` to avoid conflicts and improve reusability.
+**Category:** DevOps, Infrastructure
+**Type:** Configuration, Best Practice
+**Affected Files/Modules:** `terraform/networking.tf`, `terraform/variables.tf`
+**Priority:** [C] Critical
+**Status:** Open
+
+**ID:** `DV-INFRA-007`
+**Title:** Add Serverless VPC Access Connector in Terraform
+**Description:** Provision a `google_vpc_access_connector` in `terraform/networking.tf` if Cloud Run services require NAT for non-Google APIs or access to VPC-internal resources.
+**Category:** DevOps, Infrastructure
+**Type:** Enhancement
+**Affected Files/Modules:** `terraform/networking.tf`, `terraform/variables.tf`
+**Priority:** [P2] Medium
+**Status:** Open
+
+**ID:** `DV-INFRA-008`
+**Title:** Expand Terraform Outputs Significantly
+**Description:** Add more outputs to `terraform/outputs.tf` for key resource identifiers like VPC name, subnet name, NAT IP, logging bucket URL, BigQuery dataset ID, RAG GCS bucket name, Vertex AI Index/Endpoint IDs.
+**Category:** DevOps, Infrastructure
+**Type:** Enhancement
+**Affected Files/Modules:** `terraform/outputs.tf`, all other `*.tf` files.
+**Priority:** [P1] High
+**Status:** Open
+
+**ID:** `DV-INFRA-009`
+**Title:** Critical: Grant `sa-rag-pipeline` GCS Write Permission in Terraform
+**Description:** The `sa-rag-pipeline` service account needs permission to write to the RAG GCS bucket. Add the appropriate IAM binding (e.g., `roles/storage.objectAdmin` or `objectCreator` on the specific bucket) in `terraform/project_iam.tf` or `terraform/vector_search.tf`.
+**Category:** DevOps, Infrastructure, Security
+**Type:** Bug Fix, Configuration
+**Affected Files/Modules:** `terraform/project_iam.tf` (or `terraform/vector_search.tf`)
+**Priority:** [C] Critical
+**Status:** Open
+
+**ID:** `DV-INFRA-010`
+**Title:** Critical: Clarify RAG Index Population Workflow & Permissions
+**Description:** Clarify in `terraform/vector_search.tf` and `scripts/rag_pipeline/README.md` the timing of the RAG pipeline script execution relative to `terraform apply` for initial index population via `contents_delta_uri`. Ensure `sa-rag-pipeline` has permissions to update the Vertex AI Index if it manages content post-creation.
+**Category:** DevOps, Infrastructure, RAG
+**Type:** Process, Documentation, Configuration
+**Affected Files/Modules:** `terraform/vector_search.tf`, `scripts/rag_pipeline/README.md`, `terraform/project_iam.tf`
+**Priority:** [C] Critical
+**Status:** Open
+
+**ID:** `DV-INFRA-011`
+**Title:** Recommend Terraform Remote State Backend
+**Description:** Add a section to `terraform/README.md` recommending and guiding the setup of a remote backend (e.g., GCS bucket) for Terraform state management.
+**Category:** DevOps, Infrastructure, Best Practice
+**Type:** Documentation
+**Affected Files/Modules:** `terraform/README.md`
+**Priority:** [P1] High
+**Status:** Open
+
 ### C. Scripts & Automation (`scripts/`)
 
 **ID:** `DV-SCRIPT-001`
 **Title:** Maintain and Enhance `setup_dev_env.sh`
-**Description:** The `scripts/setup_dev_env.sh` script is crucial for developer onboarding. Regularly review and update it to reflect any changes in the development setup process, new dependencies, or improved automation steps. Ensure it's robust and provides clear guidance.
+**Description:** The `scripts/setup_dev_env.sh` script is crucial for developer onboarding. Regularly review and update it to reflect any changes in the development setup process, new dependencies, or improved automation steps. *Enhancements: Make GCP Project ID setup more interactive, add Docker installation check, offer to copy `.env.example`.*
 **Category:** DevOps
 **Type:** Maintenance, Enhancement
 **Affected Files/Modules:** `scripts/setup_dev_env.sh`.
 **Priority:** [P2] Medium
 **Status:** Open
+
+**ID:** `DV-SCRIPT-002`
+**Title:** Enhance RAG Pipeline Script (`01_process_and_embed_docs.py`)
+**Description:** Improve the RAG pipeline script by:
+    *   Making embedding model name, chunking parameters, and batch size configurable (env vars/CLI).
+    *   Standardizing GCP config sourcing.
+    *   Adding progress indicators (e.g., `tqdm`).
+    *   Validating all necessary GCS env vars.
+**Category:** DevOps, Scripts, RAG
+**Type:** Enhancement
+**Affected Files/Modules:** `scripts/rag_pipeline/01_process_and_embed_docs.py`
+**Priority:** [P1] High
+**Status:** Open
+
 ---
 
 ## V. Testing
 
 **ID:** `TEST-BE-001`
 **Title:** Develop a Backend Test Plan and Improve Coverage
-**Description:** While Pytest is set up, a formal test plan or coverage analysis might be missing. Analyze critical backend components (API endpoints, services, agent logic) and identify areas with low test coverage. Prioritize writing new unit and integration tests for these areas. Aim for a defined coverage target (e.g., 80%).
+**Description:** While Pytest is set up, a formal test plan or coverage analysis might be missing. Analyze critical backend components (API endpoints, services, agent logic) and identify areas with low test coverage. Prioritize writing new unit and integration tests for these areas. Aim for a defined coverage target (e.g., 80%). *Update: `backend/README.md` should also document this need.*
 **Category:** Testing
 **Type:** Enhancement
-**Affected Files/Modules:** `backend/tests/`, all backend source files.
+**Affected Files/Modules:** `backend/tests/`, all backend source files, `backend/README.md`.
 **Priority:** [P1] High
 **Status:** Open
 
@@ -340,11 +614,11 @@ Define the corresponding API endpoints and payload types (`frontend/src/types/ap
 **Status:** Open
 
 **ID:** `TEST-FE-001`
-**Title:** Set Up Frontend Testing Framework
-**Description:** No frontend tests were observed. Set up a testing framework for the React frontend (e.g., Jest with React Testing Library). Start by writing unit tests for critical components (e.g., `AuthContext`, UI components involved in core workflows) and services (`apiClient.ts`, `chatApiService.ts`).
+**Title:** Set Up Frontend Testing Framework and Strategy
+**Description:** No frontend tests were observed. Set up a testing framework for the React frontend (e.g., Vitest or Jest with React Testing Library). Start by writing unit tests for critical components (e.g., `AuthContext`, UI components involved in core workflows) and services (`apiClient.ts`, `chatApiService.ts`). *Update: `frontend/README.md` should document this strategy.*
 **Category:** Testing
 **Type:** Enhancement, New Feature
-**Affected Files/Modules:** `frontend/src/`, new `frontend/src/tests/` directory.
+**Affected Files/Modules:** `frontend/src/`, new `frontend/src/tests/` directory, `frontend/README.md`.
 **Priority:** [P1] High
 **Status:** Open
 
@@ -356,34 +630,35 @@ Define the corresponding API endpoints and payload types (`frontend/src/types/ap
 **Affected Files/Modules:** `frontend/src/`.
 **Priority:** [P2] Medium
 **Status:** Open
+
 ---
 
 ## VI. Documentation
 
 **ID:** `DOC-GEN-001`
 **Title:** Enhance Root `README.md`
-**Description:** Review and expand the root `README.md` to ensure it provides a comprehensive project overview, clear setup instructions (linking to `DEVELOPMENT.md`), a summary of the architecture, and contribution guidelines.
+**Description:** Review and expand the root `README.md` to ensure it provides a comprehensive project overview, clear setup instructions (linking to `DEVELOPMENT.md`), a summary of the architecture (tech stack, project structure), testing overview, contribution guidelines, and license information.
 **Category:** Documentation
 **Type:** Enhancement
 **Affected Files/Modules:** `README.md`.
-**Priority:** [P2] Medium
+**Priority:** [P1] High *(was P2)*
 **Status:** Open
 
 **ID:** `DOC-GEN-002`
 **Title:** Maintain and Update `DEVELOPMENT.md`
-**Description:** The `DEVELOPMENT.md` is a critical guide for developers. Ensure it's regularly updated to reflect any changes in the setup process, tooling, coding standards, or project structure.
+**Description:** The `DEVELOPMENT.md` is a critical guide for developers. Ensure it's regularly updated to reflect any changes in the setup process, tooling, coding standards, or project structure. *Enhancements: Create `.env.example`, add frontend & Terraform setup sections, update frontend status description.*
 **Category:** Documentation
-**Type:** Maintenance
-**Affected Files/Modules:** `DEVELOPMENT.md`.
-**Priority:** [P2] Medium
+**Type:** Maintenance, Enhancement
+**Affected Files/Modules:** `DEVELOPMENT.md`, `.env.example` (project root).
+**Priority:** [P1] High *(was P2)*
 **Status:** Open
 
 **ID:** `DOC-BE-001`
 **Title:** Enforce Comprehensive Backend Docstrings
-**Description:** Mandate and progressively add comprehensive Google Style Python docstrings for all backend modules, classes, functions, and methods. This is crucial for maintainability and onboarding new developers. Consider a tool to measure docstring coverage.
+**Description:** Mandate and progressively add comprehensive Google Style Python docstrings for all backend modules, classes, functions, and methods. This is crucial for maintainability and onboarding new developers. Consider a tool to measure docstring coverage. *Update: `backend/Dockerfile` comment for `--no-root` can be added here.*
 **Category:** Documentation, Code Quality
 **Type:** Enhancement
-**Affected Files/Modules:** All Python files in `backend/app/`.
+**Affected Files/Modules:** All Python files in `backend/app/`, `backend/Dockerfile`.
 **Priority:** [P2] Medium
 **Status:** Open
 
@@ -398,10 +673,10 @@ Define the corresponding API endpoints and payload types (`frontend/src/types/ap
 
 **ID:** `DOC-GEN-003`
 **Title:** Update `noah_workspace_rules.json`
-**Description:** The `DEVELOPMENT.md` mentions that `noah_workspace_rules.json` should reflect current coding standards and project structure. Review and update this file to align with the actual state of the project and any newly established standards.
+**Description:** The `DEVELOPMENT.md` mentions that `noah_workspace_rules.json` should reflect current coding standards and project structure. Review and update this file to align with the actual state of the project and any newly established standards. *Also, clarify/provide the referenced `coding-standards.md_vCurrent` and `project-structure.md_vCurrent` or update the reference.*
 **Category:** Documentation, Code Quality
 **Type:** Maintenance
-**Affected Files/Modules:** `noah_workspace_rules.json`.
+**Affected Files/Modules:** `noah_workspace_rules.json`, `DEVELOPMENT.md`.
 **Priority:** [P3] Low
 **Status:** Open
 
@@ -413,6 +688,72 @@ Define the corresponding API endpoints and payload types (`frontend/src/types/ap
 **Affected Files/Modules:** `backend/app/main.py`, FastAPI configuration.
 **Priority:** [P2] Medium
 **Status:** Open
+
+**ID:** `DOC-BE-002`
+**Title:** Update Backend Models README for Tool Definitions
+**Description:** The `backend/app/models/README.md` needs its descriptions of `ToolCall` and `ToolResponse` updated to match the correct Pydantic model definitions found in `firestore_models.py` (which are LangChain compatible).
+**Category:** Documentation
+**Type:** Correction
+**Affected Files/Modules:** `backend/app/models/README.md`
+**Priority:** [P1] High
+**Status:** Open
+
+**ID:** `DOC-BE-003`
+**Title:** Document Backend Plans and Verify Document Versions
+**Description:** In `backend/README.md`:
+    *   Document plans for LangGraph and agent tools integration (Phase 3).
+    *   Document plans for robust authorization logic (beyond MVP).
+    *   Document plans for further Cloud Monitoring/Logging integration.
+    *   Verify that `TA_Noah_MVP_v1.1` referenced is the latest version.
+    *   Check/confirm `textembedding-gecko@003` recommendation against latest GCP offerings.
+**Category:** Documentation
+**Type:** Enhancement, Maintenance
+**Affected Files/Modules:** `backend/README.md`
+**Priority:** [P2] Medium
+**Status:** Open
+
+**ID:** `DOC-FE-002`
+**Title:** Enhance Frontend README
+**Description:** In `frontend/README.md`:
+    *   Add a section on Testing Strategy (tools, types of tests).
+    *   Add a section explaining environment variable management for local development.
+    *   Clarify Vite path alias setup (e.g., `vite-tsconfig-paths`).
+**Category:** Documentation
+**Type:** Enhancement
+**Affected Files/Modules:** `frontend/README.md`
+**Priority:** [P1] High
+**Status:** Open
+
+**ID:** `DOC-SCRIPT-001`
+**Title:** Enhance RAG Pipeline README
+**Description:** In `scripts/rag_pipeline/README.md`:
+    *   Clarify dependency scope for `langchain-text-splitters`, `pypdf`.
+    *   Add an example/reference for `index_metadata_update_config.yaml`.
+    *   Add a note about the script's idempotency.
+**Category:** Documentation
+**Type:** Enhancement
+**Affected Files/Modules:** `scripts/rag_pipeline/README.md`
+**Priority:** [P2] Medium
+**Status:** Open
+
+**ID:** `DOC-PLAN-001`
+**Title:** Critical: Provide Access to Core Planning Documents
+**Description:** The `planning.md` file lists numerous "source of truth" documents (e.g., `TA_Noah_MVP_v1.1`, `PB_Noah_Genesis_V1.1_AI_Optimized`, "Final IDE Prompting Guide"). These must be made accessible (e.g., added to repo or linked) for AI/developers to conform to project standards. Also, clarify "MuskOS Engineering Principles."
+**Category:** Documentation, Project Management
+**Type:** Critical Requirement
+**Affected Files/Modules:** `planning.md`, Project Documentation Repository.
+**Priority:** [C] Critical
+**Status:** Open
+
+**ID:** `DOC-TASK-001`
+**Title:** Migrate Tasks to Formal Issue Tracker
+**Description:** Plan for and execute the migration of tasks from this `tasks.md` file to a formal issue tracking system (e.g., GitHub Issues, Jira) for better tracking, assignment, and lifecycle management.
+**Category:** Project Management, DevOps
+**Type:** Process Improvement
+**Affected Files/Modules:** `tasks.md`
+**Priority:** [P2] Medium
+**Status:** Open
+
 ---
 
 ## VII. Code Quality & Standards
@@ -463,5 +804,53 @@ Define the corresponding API endpoints and payload types (`frontend/src/types/ap
 **Type:** Enhancement
 **Affected Files/Modules:** All frontend code, especially auth handling and data display.
 **Priority:** [P2] Medium
+**Status:** Open
+
+**ID:** `CQ-FE-002`
+**Title:** Resolve `AppShell.main.minHeight` Calculation in Theme
+**Description:** The `AppShell.main.minHeight` calculation in `frontend/src/styles/theme.ts` using CSS variables is unlikely to work correctly. Refactor to ensure the main content area properly fills available space, likely using flexbox layout solutions in `Layout.tsx` and global styles, rather than `calc()` with potentially undefined CSS variables.
+**Category:** Code Quality, Frontend Layout
+**Type:** Bug Fix
+**Affected Files/Modules:** `frontend/src/styles/theme.ts`, `frontend/src/components/common/Layout.tsx`
+**Priority:** [P2] Medium
+**Status:** Open
+
+**ID:** `CQ-FE-003`
+**Title:** Implement Font Import for "Roboto"
+**Description:** If "Roboto" font is not a standard system font expected on all client devices, add a font import statement (e.g., from Google Fonts) in `frontend/index.html` or a global CSS file to ensure consistent typography.
+**Category:** Code Quality, Frontend UI
+**Type:** Enhancement
+**Affected Files/Modules:** `frontend/index.html` (or global CSS)
+**Priority:** [P3] Low
+**Status:** Open
+
+**ID:** `CQ-FE-004`
+**Title:** Frontend Accessibility Review for Color Contrast
+**Description:** Perform a color contrast check for the defined color combinations in `frontend/src/styles/theme.ts` (especially primary text on backgrounds, alert/notification colors) to ensure they meet WCAG AA accessibility standards. Adjust theme shades if necessary.
+**Category:** Code Quality, Accessibility
+**Type:** Enhancement
+**Affected Files/Modules:** `frontend/src/styles/theme.ts`
+**Priority:** [P2] Medium
+**Status:** Open
+
+---
+## VIII. Optimization (Performance, Bundle Size, etc.)
+
+**ID:** `OPT-FE-001`
+**Title:** Post-MVP: Review Frontend Bundle Size
+**Description:** After MVP, review frontend bundle size. Investigate alternatives or optimized imports for large dependencies like `react-markdown`, `date-fns` if they contribute significantly. Ensure tree-shaking is effective.
+**Category:** Optimization, Frontend
+**Type:** Enhancement
+**Affected Files/Modules:** `frontend/` build outputs, `package.json`
+**Priority:** [P3] Low
+**Status:** Open
+
+**ID:** `OPT-FE-002`
+**Title:** Consider Preloading Strategy for Lazy-Loaded Routes
+**Description:** For a more advanced optimization post-MVP, investigate preloading strategies for some lazy-loaded routes in `frontend/src/App.tsx` that are highly likely to be visited next (e.g., using `rel="prefetch"` or other techniques).
+**Category:** Optimization, Frontend
+**Type:** Enhancement
+**Affected Files/Modules:** `frontend/src/App.tsx`
+**Priority:** [P3] Low
 **Status:** Open
 ---
