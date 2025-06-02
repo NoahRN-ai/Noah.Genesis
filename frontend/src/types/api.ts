@@ -101,13 +101,15 @@ export interface PatientDataLogData { // Data fetched from /patient-data-logs
 }
 
 // --- For Chat Interface Component ---
+// Used by ChatInterface component to structure message display
 export interface DisplayMessage {
-  id: string;
+  id: string; // interaction_id from backend, or a client-generated ID for local user messages/system messages
   text: string;
-  sender: 'user' | 'agent' | 'system'; // System for status like 'typing' or errors
-  timestamp?: Date | string; // Store as ISO string, convert to Date for display
-  isTyping?: boolean;
-  tool_calls?: ToolCallData[] | null;
-  // Add other display-specific properties here if needed, e.g., avatar, markdown rendering status
+  sender: 'user' | 'agent' | 'system'; // 'system' for status messages like 'typing' or client-side errors
+  timestamp: Date | string; // Store as Date for easier client-side formatting, or string if directly from API
+  isTyping?: boolean; // True if this is an "agent is typing" visual indicator, not a real message
+  isError?: boolean; // Flag if this message represents an error to display differently
+  tool_calls?: ToolCallData[] | null; // Store for potential future display if needed
+  // If message content contains markdown, the ChatMessage component will handle rendering
 }
 ```
