@@ -112,3 +112,17 @@ graph TD
 
     InvokeGraph -- final_state (contains final_response_text) --> ReturnToUser[API: Return ChatResponse];
 ```
+
+## 6. Integration with /chat API Endpoint (`chat.py`)
+
+The `/chat` API endpoint in `backend/app/api/v1/endpoints/chat.py` orchestrates the interaction with the LangGraph agent:
+
+*   Receives `ChatRequest` (user query, session ID).
+*   Authenticates the user.
+*   Saves the user's message to `InteractionHistory` via `memory.save_interaction()` **before** invoking the graph.
+*   Prepares an initial `AgentState` with `user_input`, `session_id`, `user_id`, and other fields initialized to `None` or empty lists.
+*   Invokes the compiled `agent_graph.ainvoke(initial_state)`.
+*   Extracts `final_response_text` and `agent_turn_interaction_id` from the returned `final_state`. It also checks for `error_message`.
+*   Constructs and returns a `ChatResponse` to the client. Note: The saving of the agent's specific turn (response, tools used) is handled by the `save_agent_interaction_node` within the graph itself.
+
+This LangGraph setup provides a resilient and extensible foundation for the Noah.AI agent's conversational and reasoning capabilities for the MVP.
