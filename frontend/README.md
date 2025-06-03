@@ -16,15 +16,16 @@ This guide details the setup for the React+TypeScript frontend application for P
 
 ## 2. Initial Project Setup Instructions
 
-These steps are to be performed by a human engineer.
+These steps are to be performed by a human engineer for local development.
+**For all deployment-related activities, including initial Firebase setup, manual deployment, and CI/CD configuration, please refer to the comprehensive `frontend/DEPLOYMENT.MD` guide.**
 
-1.  **Create the Vite Project:**
-    Navigate to the root directory of the `Noah.Genesis` repository in your terminal and run:
+1.  **Create the Vite Project (if not already cloned from the repo):**
+    If you are starting from scratch and not cloning the existing `Noah.Genesis` repository, navigate to your desired parent directory and run:
     ```bash
     npm create vite@latest frontend -- --template react-ts
     ```
     (Alternatively, use `yarn create vite frontend --template react-ts` or `pnpm create vite frontend --template react-ts`)
-    This command initializes a new React + TypeScript project in a directory named `frontend`.
+    This command initializes a new React + TypeScript project in a directory named `frontend`. If you have cloned the repository, the `frontend` directory already exists.
 
 2.  **Navigate into the Project Directory:**
     ```bash
@@ -38,6 +39,7 @@ These steps are to be performed by a human engineer.
     ```
     (For yarn: `yarn add axios react-router-dom@6 @mantine/core @mantine/hooks @mantine/notifications`)
     (For pnpm: `pnpm add axios react-router-dom@6 @mantine/core @mantine/hooks @mantine/notifications`)
+    *Note: If using `pnpm`, you might prefer `pnpm install` which respects the `pnpm-lock.yaml` if present.*
 
 4.  **Install Development Dependencies:**
     These are for code quality and formatting.
@@ -46,7 +48,7 @@ These steps are to be performed by a human engineer.
     ```
     (For yarn: `yarn add --dev prettier eslint-config-prettier eslint-plugin-prettier`)
     (For pnpm: `pnpm add --dev prettier eslint-config-prettier eslint-plugin-prettier`)
-    *Note: Vite's `react-ts` template usually includes a basic ESLint setup. These commands add Prettier and its ESLint integration.*
+    *Note: Vite's `react-ts` template usually includes a basic ESLint setup. These commands add Prettier and its ESLint integration. If a lockfile (`package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`) exists, prefer using the relevant install command (e.g., `npm install`, `yarn install`, `pnpm install`) to ensure consistent dependency versions.*
 
 ## 3. Mandated Project Structure
 
@@ -125,22 +127,23 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 Vite generates the following scripts in your `frontend/package.json`:
 *   `"dev"`: Starts the development server (e.g., `vite`).
-*   `"build"`: Builds the application for production (e.g., `tsc && vite build`).
+*   `"build"`: Builds the application for production (e.g., `tsc && vite build`). This script is primarily for local production builds or as part of the CI/CD pipeline defined in `frontend/DEPLOYMENT.MD`.
 *   `"lint"`: Runs the linter (e.g., `eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0`).
-*   `"preview"`: Serves the production build locally for preview.
+*   `"preview"`: Serves the production build locally for preview. Useful for testing the build output before deployment.
 
 It's recommended to add a formatting script:
 ```json
 // Add to "scripts" in package.json
 "format": "prettier --write \"src/**/*.{ts,tsx,css,md,json}\" --config ./.prettierrc.json"
 ```
+**For detailed deployment scripts and processes, please refer to `frontend/DEPLOYMENT.MD`.**
 
 ## 6. Code Quality Configuration Files
 
 *   **`frontend/.eslintrc.cjs`:** This file configures ESLint for static code analysis and enforcing coding standards. The generated content for this file ensures integration with TypeScript, React, React Hooks, and Prettier.
 *   **`frontend/.prettierrc.json`:** This file configures Prettier for consistent code formatting.
 
-(Content for these files will be provided separately by AEM-Engineer_Noah_MVP_Builder_v1.0 for you to create.)
+(Content for these files will be provided separately by AEM-Engineer_Noah_MVP_Builder_v1.0 for you to create, or may already exist in the repository.)
 
 ## 7. TypeScript Configuration for Absolute Imports
 
@@ -164,4 +167,4 @@ Add/update the `compilerOptions` section:
 ```
 After updating `tsconfig.json`, you might need to restart your Vite development server for these path aliases to take effect. Also, ensure `vite.config.ts` is configured to resolve these aliases if not handled automatically (Vite often uses `vite-tsconfig-paths` plugin or similar for this, or you can add an alias config to Vite directly). For a basic Vite setup, often `baseUrl` in `tsconfig.json` is sufficient if `vite.config.ts` doesn't override it.
 
-This setup establishes a robust foundation for developing the Project Noah MVP frontend with velocity and quality.
+This setup establishes a robust foundation for developing the Project Noah MVP frontend with velocity and quality. For deployment information, please see `frontend/DEPLOYMENT.MD`.
