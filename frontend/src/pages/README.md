@@ -1,71 +1,84 @@
-# Frontend Pages Documentation
+# Frontend Pages (`frontend/src/pages/`)
 
-This document provides an overview of the key page components in the Noah-AI frontend application. Pages are typically responsible for orchestrating data flow between services and child components, and correspond to specific application routes.
+This directory contains the top-level React components that correspond to different views or routes in the Project Noah MVP application. Pages typically orchestrate data fetching for their view and compose various UI components.
 
 ## Core Application Pages
 
-### `ChatPage.tsx`
+### 1. `LoginPage.tsx`
 
--   **Purpose**: Serves as the central hub for user interaction with the AI agent. It facilitates real-time chat, displays relevant patient summaries, and provides access to log new patient data via a modal.
--   **Route Example**: `/chat` or `/` (as the main landing page post-login).
--   **Primary Child Components**:
-    -   `ChatInterface.tsx`: Handles the direct chat message display and input.
-    -   `PatientSummaryDisplay.tsx`: Shows patient-related summaries in a sidebar.
-    -   `PatientDataLogModal.tsx`: A modal component that embeds `PatientDataForm.tsx` for logging new data.
--   **Data Flow Overview**:
-    -   Manages the overall layout for the chat, summary display, and data logging access.
-    -   `ChatInterface` handles its own state for messages and interaction with the chat service.
-    -   The "Log Patient Data" button on this page triggers the `PatientDataLogModal`.
-    -   Authentication state (`currentUser`) is checked to ensure the user is logged in.
-    -   Initializes a `sessionId` for chat interactions.
-    -   Potentially handles page-level errors or notifications.
+*   **Route:** `/login`
+*   **Purpose:** Provides the interface for user authentication (Sign In) and new user registration (Sign Up).
+*   **Key Features & UX (`dynamous.ai` Contributions):**
+    *   Uses Mantine UI components (`Paper`, `TextInput`, `PasswordInput`, `Button`, `Alert`, `LoadingOverlay`) for a clean and professional form.
+    *   Supports both Email/Password authentication and "Sign in with Google" using Firebase Authentication.
+    *   Employs Mantine `useForm` with Zod for robust client-side validation of email and password fields.
+    *   Clearly distinguishes between Sign In and Sign Up modes, with an easy toggle (`Anchor` link).
+    *   Displays informative error messages for invalid input or authentication failures using Mantine `Alert` and `Notifications`.
+    *   Shows loading states during authentication attempts.
+    *   Redirects authenticated users away from the login page (e.g., to `/chat`).
+    *   [Visual Placeholder: A centered form with application logo/name, input fields for email/password, toggle for Sign Up including confirm password and display name, and a prominent "Sign in with Google" button.]
+*   **Primary Child Components:** None (directly uses Mantine components).
+*   **Data Flow & Services:**
+    *   Interacts with `firebaseService.ts` for `signInWithEmailAndPassword`, `createUserWithEmailAndPassword`, and `signInWithPopup` (Google).
+    *   Uses `AuthContext` (via `useAuth` hook) to check current authentication state and trigger updates upon successful login/registration.
 
-### `LoginPage.tsx`
+### 2. `ChatPage.tsx`
 
--   **Purpose**: Provides the interface for user authentication. It allows users to sign in to the application, typically using Firebase authentication.
--   **Route Example**: `/login`
--   **Primary Child Components**:
-    -   Likely contains Mantine form components (`TextInput` for email/password, `Button` for submission) or a dedicated login form component if abstracted (e.g., `LoginForm.tsx` - not explicitly created yet, but typical).
-    -   May display UI elements for "Sign in with Google" or other OAuth providers.
--   **Data Flow Overview**:
-    -   Captures user credentials (email, password) or OAuth provider choice.
-    -   Interacts with an authentication service (e.g., methods from `useAuth()` hook which wraps Firebase auth) to sign the user in.
-    -   Handles loading states during the authentication process.
-    -   Displays error messages if authentication fails.
-    -   Redirects the user to a different page (e.g., `ChatPage`) upon successful authentication.
-    -   Redirects already authenticated users away from the login page if they try to access it.
+*   **Route:** `/chat` (and default `/` for authenticated users), also `/chat/:sessionId`
+*   **Purpose:** The main page for users to interact with the Noah.AI agent. Displays AI-generated summaries and allows quick data logging.
+*   **Key Features:**
+    *   Primarily houses the `ChatInterface.tsx` component, passing necessary props like `currentUserId` and `initialSessionId`.
+    *   Manages `sessionId` state, either from URL parameter (`:sessionId`) or by generating a new one (`uuidv4`).
+    *   Integrates a `PatientSummaryDisplay.tsx` component within an `Accordion` section. Includes placeholder logic (`handleFetchPatientSummary`) to simulate fetching and displaying summary content, along with loading and error states.
+    *   Provides a "Log Patient Data" button that opens a `PatientDataLogModal` for quick data entry without leaving the chat context.
+    *   The layout uses Mantine `Accordion` to organize chat, summaries, and potentially other tools.
+*   **Primary Child Components:** `ChatInterface.tsx`, `PatientSummaryDisplay.tsx`, `PatientDataLogModal.tsx`.
+*   **Data Flow & Services:**
+    *   Relies on `ChatInterface.tsx` to handle chat message API calls via `chatApiService.ts`.
+    *   Uses `AuthContext` to ensure user is authenticated.
+    *   Placeholder summary interaction (no actual API calls for summary in Task 2.2).
+    *   Modal interaction for `PatientDataForm` via `PatientDataLogModal`.
 
-### `UserProfilePage.tsx`
+### 3. `UserProfilePage.tsx`
 
--   **Purpose**: Allows users to view and edit their own profile information.
--   **Route Example**: `/profile/:userId` (e.g., `/profile/user123`)
--   **Primary Child Components**:
-    -   `UserProfileForm.tsx`: The form component responsible for displaying and handling edits to user profile data.
--   **Data Flow Overview**:
-    -   Extracts `userId` from the route parameters (currently mocked).
-    -   Passes the `userId` to `UserProfileForm.tsx`.
-    -   `UserProfileForm.tsx` then handles fetching the user's current profile data based on the `userId` and submitting any updates.
-    -   The page itself is a container for the form, providing context like a page title.
+*   **Route:** `/profile/:userId` (e.g., `/profile/me` or `/profile/<firebase_uid>`)
+*   **Purpose:** Allows users to view and (if their own profile) edit their profile information.
+*   **Key Features:**
+    *   Fetches user profile data based on the `userId` route parameter (resolving 'me' to current user's UID) using `getUserProfile` from `userProfileApiService.ts`.
+    *   Displays user profile information using the `UserProfileForm.tsx` component.
+    *   Manages loading and error states during data fetching, providing feedback via `Alerts` and `Notifications`.
+    *   Uses Mantine `Breadcrumbs` for navigation context and `ThemeIcon` for visual appeal.
+*   **Primary Child Components:** `UserProfileForm.tsx`.
+*   **Data Flow & Services:**
+    *   Uses `AuthContext` for current user details.
+    *   Fetches data using `getUserProfile` from `userProfileApiService.ts`.
+    *   Updates are handled by `UserProfileForm` which calls `updateUserProfile` from `userProfileApiService.ts`.
 
-### `PatientDataLogPage.tsx`
+### 4. `PatientDataLogPage.tsx`
 
--   **Purpose**: Offers a dedicated, full-page interface for logging new patient data. This might be used when a more focused data entry experience is needed compared to the modal on `ChatPage`.
--   **Route Example**: `/patient-data/log` or `/patient/:patientId/log`
--   **Primary Child Components**:
-    -   `PatientDataForm.tsx`: The core form used for inputting patient data.
--   **Data Flow Overview**:
-    -   Acts as a container for the `PatientDataForm`.
-    -   Passes a `patientId` (currently mocked as "patient-123") to the `PatientDataForm`.
-    -   The `PatientDataForm` component manages its own state and submission logic.
-    -   The page provides a clear title and focused environment for the data logging task.
+*   **Route:** `/patient-data/log` (Example, final route TBD)
+*   **Purpose:** Provides a dedicated page for users to submit patient data logs. This offers an alternative to logging data via the modal available in the main layout or `ChatPage`.
+*   **Key Features:**
+    *   Embeds the `PatientDataForm.tsx` component.
+    *   The page context would ideally determine `targetPatientUserId` (e.g., for a patient, it's their own UID; for a nurse, it might involve selecting a patient from a list, though for MVP, it defaults to the current user's UID passed to the form).
+    *   Styled with Mantine `Container`, `Paper`, `Title` for a clear and focused presentation.
+*   **Primary Child Components:** `PatientDataForm.tsx`.
+*   **Data Flow & Services:**
+    *   Relies on `PatientDataForm.tsx` to handle form state and submission using `patientDataApiService.ts`.
+    *   Uses `AuthContext` to identify the logged-in user (who is creating the log entry - `created_by_user_id`).
 
 ## Utility Pages
 
-### `NotFoundPage.tsx`
+### 1. `SettingsPage.tsx` (Placeholder)
 
--   **Purpose**: Displays a user-friendly message when a user navigates to a route that does not exist within the application.
--   **Route Example**: Any route not explicitly defined (e.g., `/this-page-does-not-exist`).
--   **Primary Child Components**:
-    -   Typically simple Mantine components like `Container`, `Title`, `Text`, and a `Button` to navigate back to a safe page (e.g., the homepage).
--   **Data Flow Overview**:
-    -   This page is usually rendered by the routing setup when no other route matches. It's self-contained and doesn't typically involve complex data flows.
+*   **Route:** `/settings`
+*   **Purpose:** A placeholder for future application settings.
+*   **Features (MVP):** Displays a simple message indicating its placeholder status. (Assumed to exist from previous tasks or to be created simply).
+
+### 2. `NotFoundPage.tsx` (Placeholder)
+
+*   **Route:** `*` (fallback for any undefined routes)
+*   **Purpose:** Provides a user-friendly "404 Page Not Found" message.
+*   **Features:** Displays an error message and a button/link to navigate back to the home page. Styled with Mantine components for a consistent look. (Assumed to exist or be created simply).
+
+This page structure provides the necessary views for the core MVP functionality, focusing on clear navigation and encapsulation of features within their respective pages.
