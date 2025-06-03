@@ -2,25 +2,29 @@
 
 This document provides an overview of the tools available to the agent, their schemas, and how they are integrated into the system.
 
-## RAG (Retrieval Augmented Generation) Tool: `retrieve_knowledge_base_tool`
+## RAG (Retrieval Augmented Generation) Tool: `retrieve_knowledge_base`
 
-**Purpose:** The RAG tool, named `retrieve_knowledge_base_tool` (defined as `RAG_TOOL_NAME` in constants), is designed to retrieve relevant information from a clinical knowledge base to augment the agent's responses. This helps in providing more accurate, context-aware, and up-to-date factual information for medical queries.
+**Purpose:** The RAG tool, registered with the LLM as `retrieve_knowledge_base` (this exact name is stored in the `RAG_TOOL_NAME` constant in `tool_definitions.py`), is designed to retrieve relevant information from a clinical knowledge base. The underlying Python implementation is the `async def retrieve_knowledge_base_tool` function. This tool helps in providing accurate, context-aware, and up-to-date factual information for medical queries.
 
 **File Location:** `backend/app/agent/tools.py`
-**Function Name:** `retrieve_knowledge_base_tool` (asynchronous: `async def`)
+**Python Function Name:** `retrieve_knowledge_base_tool` (asynchronous: `async def`)
+**LLM Registered Name:** `retrieve_knowledge_base` (via `RAG_TOOL_NAME`)
 
-### Input Schema
+### Input Schema (for Python function)
 
-The tool expects input according to the `RAGQueryInputArgs` Pydantic schema:
+The `retrieve_knowledge_base_tool` Python function expects input according to the `RAGQueryInputArgs` Pydantic schema (defined in `tools.py`):
 
 ```python
+# From backend/app/agent/tools.py
 from pydantic import BaseModel, Field
 
 class RAGQueryInputArgs(BaseModel):
     query: str = Field(description="The specific question, topic, or keywords to search for in the clinical knowledge base.")
 ```
 
-- **`query` (str)**: This field should contain a clear, natural language question or a concise topic for searching the clinical knowledge base (e.g., 'What are the current sepsis bundle guidelines?'). An empty or whitespace-only query will result in an error.
+- **`query` (str)**: This field should contain a clear, natural language question or a concise topic for searching the clinical knowledge base (e.g., 'What are the current sepsis bundle guidelines?'). An empty or whitespace-only query will result in an error by the tool.
+
+Note: For LLM function calling, a similar Pydantic model `RAGQueryInput` is defined in `tool_definitions.py` to structure the parameters provided to the LLM.
 
 ### Return Values
 
@@ -31,49 +35,66 @@ The `retrieve_knowledge_base_tool` function returns a `List[Dict[str, Any]]`. Th
 
 ### LLM Integration (Vertex AI Function Calling)
 
-The RAG tool is made available to the LLM via Vertex AI Function Calling. Its definition is specified in `backend/app/agent/tool_definitions.py`.
+The RAG tool is defined for the LLM using specific Vertex AI classes. The definition is located in `backend/app/agent/tool_definitions.py` and is part of the `AVAILABLE_TOOLS_SCHEMAS_FOR_LLM` list.
 
-**Tool Definition (`tool_definitions.py` excerpt):**
+**Tool Definition for Vertex AI (`tool_definitions.py` excerpt):**
 ```python
+# From backend/app/agent/tool_definitions.py
 from pydantic import BaseModel, Field
+from vertexai.generative_models import Tool as VertexTool, FunctionDeclaration
 
-class RAGQueryInputArgs(BaseModel):
-    query: str = Field(description="The specific question, topic, or keywords to search for in the clinical knowledge base.")
+# Schema for LLM parameters (mirrors RAGQueryInputArgs from tools.py)
+class RAGQueryInput(BaseModel):
+    query: str = Field(description="The specific question, topic, or keywords to search for in the clinical knowledge base. This should be a well-formed query derived from the user's current request.")
 
-RAG_TOOL_NAME = "retrieve_knowledge_base_tool"
+RAG_TOOL_NAME = "retrieve_knowledge_base"
 
-rag_tool_definition = {
-    "name": RAG_TOOL_NAME,
-    "description": (
-        "Searches the clinical knowledge base to answer questions about critical care, "
-        "medical protocols, patient guidelines, or other specific medical topics. "
-        "Use this tool when the user's query requires factual information that is "
-        "likely found within the curated medical documents and is not general knowledge. "
-        "For example, use for 'What are the current sepsis bundle guidelines?' or 'Tell me about managing ARDS.' "
-        "The query should be a clear, natural language question or a concise topic."
-    ),
-    "input_schema": RAGQueryInputArgs
-}
+rag_tool_vertex_declaration = VertexTool(
+    function_declarations=[
+        FunctionDeclaration(
+            name=RAG_TOOL_NAME,
+            description=(
+                "Searches the clinical knowledge base to answer questions about critical care, "
+                "medical protocols, patient guidelines, or other specific medical topics. "
+                "Use this tool when the user's query requires specific factual information that is "
+                "likely found within curated medical documents and is not general knowledge or part of common sense. "
+                "For example, for queries like 'What are the current sepsis bundle guidelines?' "
+                "or 'Tell me about managing ARDS protocol details'."
+            ),
+            parameters={
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "The specific question, keywords, or topic to search for effectively in the knowledge base. Formulate a clear and concise search query based on the user's need for information from the clinical knowledge base."
+                    }
+                },
+                "required": ["query"]
+            }
+        )
+    ]
+)
+
+# AVAILABLE_TOOLS_SCHEMAS_FOR_LLM = [rag_tool_vertex_declaration]
 ```
-The LLM uses this definition (name, detailed description, and input schema) to understand when and how to correctly invoke the tool.
+The LLM uses this `VertexTool` definition (name, detailed description, and parameters schema) to understand when and how to correctly invoke the tool. The `parameters` directly define the JSON schema for the LLM.
 
 ### LangGraph Integration
 
-The RAG tool is executed within the LangGraph framework via a dedicated asynchronous node.
+The RAG tool (Python function `retrieve_knowledge_base_tool`) is executed within the LangGraph framework via a dedicated asynchronous node.
 
 **Graph Node (`graph.py`):** `execute_rag_tool_node` (asynchronous: `async def`)
 
 This node is responsible for:
 1. Receiving the agent's current state (`AgentState`).
 2. Extracting the query for the RAG tool from the state (e.g., from the latest message).
-3. Asynchronously invoking the tool: `await retrieve_knowledge_base_tool.ainvoke({"query": query})`.
-4. Processing the returned `List[Dict[str, Any]]` (which could be retrieved chunks, an empty list, or an error dictionary).
+3. Asynchronously invoking the Python tool function: `await retrieve_knowledge_base_tool.ainvoke({"query": query})`.
+4. Processing the returned `List[Dict[str, Any]]`.
 5. Updating the `AgentState`'s `rag_output: List[Dict[str, Any]]` field with these results.
 
-The `rag_output` is then available for subsequent nodes in the graph, typically used by an LLM node to formulate a response grounded in the retrieved information.
+The `rag_output` is then available for subsequent nodes in the graph.
 
 ### Data Fidelity and Context
-
 The RAG tool plays a crucial role in maintaining data fidelity by:
 - **Grounding Responses:** Ensuring that the agent's responses are based on information from the verified knowledge base rather than solely on the LLM's parametric memory.
 - **Reducing Hallucinations:** By providing relevant context, the tool helps minimize the chances of the LLM generating incorrect or fabricated information.
