@@ -1,116 +1,97 @@
-# Agent Tools Documentation
+# Agent Tools for Project Noah MVP (`tools.py`)
 
-This document provides an overview of the tools available to the agent, their schemas, and how they are integrated into the system.
+This document describes the tools available to the Noah.AI agent, how they are defined, integrated into the LangGraph orchestration, and used by the LLM. For the MVP, the primary tool is focused on Retrieval Augmented Generation (RAG) to access a curated clinical knowledge base.
 
-## RAG (Retrieval Augmented Generation) Tool: `retrieve_knowledge_base`
+## 1. Overview of Tool Usage in LangGraph
 
-**Purpose:** The RAG tool, registered with the LLM as `retrieve_knowledge_base` (this exact name is stored in the `RAG_TOOL_NAME` constant in `tool_definitions.py`), is designed to retrieve relevant information from a clinical knowledge base. The underlying Python implementation is the `async def retrieve_knowledge_base_tool` function. This tool helps in providing accurate, context-aware, and up-to-date factual information for medical queries.
+Tools extend the capabilities of the Large Language Model (LLM) by allowing it to interact with external data sources or perform specific, pre-defined functions. In Project Noah, tools are crucial for enabling the agent to:
+* Access and retrieve information from the specialized clinical knowledge base (via RAG).
+* Provide factually grounded responses by referencing this curated data.
 
-**File Location:** `backend/app/agent/tools.py`
-**Python Function Name:** `retrieve_knowledge_base_tool` (asynchronous: `async def`)
-**LLM Registered Name:** `retrieve_knowledge_base` (via `RAG_TOOL_NAME`)
+The agent's interaction with tools within the LangGraph framework generally follows this sequence:
 
-### Input Schema (for Python function)
+1.  **LLM Decision (`llm_reasoner_node`):** The LLM analyzes the user's query and the conversation history. Using the descriptions of available tools (provided via Vertex AI Function Calling schemas from `tool_definitions.py`), it determines if a tool is necessary to fulfill the request.
+2.  **Tool Invocation Request:** If a tool is deemed necessary, the LLM generates a structured request. This request specifies the tool's name and the required input arguments. This is captured in the `tool_calls` attribute of the `AIMessage` returned by the `llm_reasoner_node`.
+3.  **Graph Routing (`should_execute_tools_router`):** The LangGraph's conditional router detects the tool call request in the `AIMessage` and directs the agent's state to the appropriate tool execution node.
+4.  **Tool Execution (e.g., `execute_rag_tool_node`):** The designated graph node invokes the actual Python function for the requested tool (defined in `tools.py`), passing the arguments provided by the LLM.
+5.  **Output Processing & State Update:** The tool's output is captured. This output, along with details of the tool call, is structured into `PydanticToolResponse` objects and stored in `AgentState.executed_tool_responses`. Specialized fields in the state, like `AgentState.rag_context`, are also populated with processed tool output (e.g., extracted text chunks for RAG).
+6.  **LLM Synthesis (`llm_reasoner_node`):** The agent state, now augmented with the tool's output, is typically routed back to the `llm_reasoner_node`. The LLM uses this new information (provided as `ToolMessage` context from `executed_tool_responses`) to synthesize a final, informed response for the user.
 
-The `retrieve_knowledge_base_tool` Python function expects input according to the `RAGQueryInputArgs` Pydantic schema (defined in `tools.py`):
+## 2. RAG Tool: `retrieve_knowledge_base_tool`
+
+This is the primary tool for the MVP, enabling the agent to query the clinical knowledge base.
+
+* **Implementation File:** `backend/app/agent/tools.py`
+* **Core Function:** `async def retrieve_knowledge_base_tool(query: str) -> List[Dict[str, Any]]`
+* **LangChain Integration:** The function is decorated with `@tool` from `langchain_core.tools`. This decorator helps in:
+    * Defining the tool's `name` for the LLM (`RAG_TOOL_NAME` from `tool_definitions.py`).
+    * Specifying the input argument schema using a Pydantic model (`args_schema=RAGQueryInputArgs`).
+    * Using the function's docstring as a description for the LLM, guiding its decision on when to use the tool.
+* **Purpose:** To search the project-specific, curated clinical knowledge base (indexed in Vertex AI Vector Search as per Task 1.4) for information relevant to a given query. This allows the agent to provide answers grounded in trusted medical documents, rather than relying solely on its general pre-training.
+* **Underlying Service Call:** Internally, this tool calls `await rag_service.retrieve_relevant_chunks(query_text=query, top_k=settings.RAG_TOP_K)` from `backend/app/services/rag_service.py`.
+
+### 2.1. Input Schema (`RAGQueryInputArgs`)
+
+The `retrieve_knowledge_base_tool` expects its arguments to conform to the `RAGQueryInputArgs` Pydantic schema, defined in `tools.py`:
 
 ```python
-# From backend/app/agent/tools.py
 from pydantic import BaseModel, Field
 
 class RAGQueryInputArgs(BaseModel):
     query: str = Field(description="The specific question, topic, or keywords to search for in the clinical knowledge base.")
 ```
+-   **`query: str`**: This field should contain the natural language question or topic that the LLM formulates based on the user's request, intended for searching the knowledge base.
 
-- **`query` (str)**: This field should contain a clear, natural language question or a concise topic for searching the clinical knowledge base (e.g., 'What are the current sepsis bundle guidelines?'). An empty or whitespace-only query will result in an error by the tool.
+### 2.2. Output Structure
 
-Note: For LLM function calling, a similar Pydantic model `RAGQueryInput` is defined in `tool_definitions.py` to structure the parameters provided to the LLM.
+The `retrieve_knowledge_base_tool` function (and thus `rag_service.retrieve_relevant_chunks`) returns a list of dictionaries. Each dictionary represents a relevant text chunk retrieved from the knowledge base.
 
-### Return Values
-
-The `retrieve_knowledge_base_tool` function returns a `List[Dict[str, Any]]`. The structure of the return value can be:
-- **Successful Retrieval:** A list of dictionaries, where each dictionary represents a retrieved chunk of information (e.g., `[{"id": "...", "chunk_text": "...", "source_document_name": "...", "score": 0.85}, ...]`).
-- **No Chunks Found:** An empty list (`[]`) if no relevant chunks are found for the query.
-- **Error During Execution:** A list containing a single dictionary with an error key (e.g., `[{"error": "Query cannot be empty..."}]` or `[{"error": "Failed to retrieve information..."}]`) if an issue occurs, such as an invalid query or an internal error during retrieval.
-
-### LLM Integration (Vertex AI Function Calling)
-
-The RAG tool is defined for the LLM using specific Vertex AI classes. The definition is located in `backend/app/agent/tool_definitions.py` and is part of the `AVAILABLE_TOOLS_SCHEMAS_FOR_LLM` list.
-
-**Tool Definition for Vertex AI (`tool_definitions.py` excerpt):**
-```python
-# From backend/app/agent/tool_definitions.py
-from pydantic import BaseModel, Field
-from vertexai.generative_models import Tool as VertexTool, FunctionDeclaration
-
-# Schema for LLM parameters (mirrors RAGQueryInputArgs from tools.py)
-class RAGQueryInput(BaseModel):
-    query: str = Field(description="The specific question, topic, or keywords to search for in the clinical knowledge base. This should be a well-formed query derived from the user's current request.")
-
-RAG_TOOL_NAME = "retrieve_knowledge_base"
-
-rag_tool_vertex_declaration = VertexTool(
-    function_declarations=[
-        FunctionDeclaration(
-            name=RAG_TOOL_NAME,
-            description=(
-                "Searches the clinical knowledge base to answer questions about critical care, "
-                "medical protocols, patient guidelines, or other specific medical topics. "
-                "Use this tool when the user's query requires specific factual information that is "
-                "likely found within curated medical documents and is not general knowledge or part of common sense. "
-                "For example, for queries like 'What are the current sepsis bundle guidelines?' "
-                "or 'Tell me about managing ARDS protocol details'."
-            ),
-            parameters={
-                "type": "object",
-                "properties": {
-                    "query": {
-                        "type": "string",
-                        "description": "The specific question, keywords, or topic to search for effectively in the knowledge base. Formulate a clear and concise search query based on the user's need for information from the clinical knowledge base."
-                    }
-                },
-                "required": ["query"]
-            }
-        )
-    ]
-)
-
-# AVAILABLE_TOOLS_SCHEMAS_FOR_LLM = [rag_tool_vertex_declaration]
+Example structure of a single dictionary item in the returned list:
+```json
+{
+  "id": "unique_chunk_identifier_string",
+  "chunk_text": "The actual content of the retrieved text chunk...",
+  "source_document_name": "source_file_name.pdf_or_id",
+  "score": 0.88,
+  "metadata": { }
+}
 ```
-The LLM uses this `VertexTool` definition (name, detailed description, and parameters schema) to understand when and how to correctly invoke the tool. The `parameters` directly define the JSON schema for the LLM.
+(Note: `score` is a relevance score from the vector search. `metadata` could include other details like page number, document title, etc.)
 
-### LangGraph Integration
+If no relevant chunks are found for the query, the tool returns an empty list (`[]`).
+If an error occurs during the retrieval process, the tool returns a list containing a single dictionary indicating the error, for example: `[{"error": "Failed to retrieve information..."}]`.
 
-The RAG tool (Python function `retrieve_knowledge_base_tool`) is executed within the LangGraph framework by the `execute_rag_tool_node` (asynchronous: `async def`) located in `backend/app/agent/graph.py`. This node handles all tool executions requested by the LLM.
+### 2.3. LLM Awareness and Schema Definition
 
-**Graph Node (`graph.py`):** `execute_rag_tool_node`
+For the LLM to effectively use this tool, it must be aware of its existence, purpose, and how to call it (i.e., its input arguments).
 
-This node has the following key responsibilities when processing tool calls:
+*   **Vertex AI Tool Schema:** This is defined in `backend/app/agent/tool_definitions.py` as `rag_tool_vertex_declaration` (an instance of `vertexai.generative_models.Tool`). This object includes:
+    *   `name`: Set to `RAG_TOOL_NAME` ("retrieve_knowledge_base").
+    *   `description`: A detailed explanation for the LLM on what the tool does and when to use it (e.g., "Searches the clinical knowledge base... Use this tool when...").
+    *   `parameters`: A JSON schema object defining the expected input arguments, which must align with `RAGQueryInputArgs` (e.g., requiring a `query` string).
+*   **Provision to LLM:** The `get_available_tools_for_llm()` function in `tool_definitions.py` provides `rag_tool_vertex_declaration` to the `llm_reasoner_node`. This schema is then passed to `llm_service.get_llm_response()` when calling the Vertex AI LLM, enabling its function calling capability.
 
-1.  **Receives Agent State:** Takes the current `AgentState` as input.
-2.  **Processes LLM Tool Calls:**
-    *   Retrieves the list of tool call requests from `state['llm_response_with_actions']`.
-    *   For each requested tool call:
-        *   Creates a `PydanticToolCall` object (from `tool_call_request.name`, `tool_call_request.args`, `tool_call_request.id`) and adds it to `state['agent_turn_tool_calls']` for logging.
-        *   If the `tool_name` matches `RAG_TOOL_NAME` ("retrieve_knowledge_base"):
-            *   Invokes the RAG tool asynchronously: `await retrieve_knowledge_base_tool.ainvoke(tool_args_dict)`.
-3.  **Handles RAG Tool Output and Updates State:**
-    *   The direct output from `retrieve_knowledge_base_tool.ainvoke()` (a `List[Dict[str, Any]]`) is stored as the `content` in a `PydanticToolResponse` object. This response object (along with those from any other tools called in the same turn) is added to `state['executed_tool_responses']` and `state['agent_turn_tool_responses']`.
-    *   `state['rag_context']` (a `List[str]`) is populated based on the RAG tool's output:
-        *   **Success:** Contains a list of `chunk_text` strings extracted from the successfully retrieved chunks.
-        *   **RAG Error:** Contains a message like `["Information retrieval failed: <error_details>"]`.
-        *   **No Results:** Contains a message like `["No specific information was found for your query in the knowledge base."]`.
-        *   **Unexpected Output:** Contains a message like `["There was an issue processing information from the knowledge base."]`.
-    *   `state['error_message']` (an `Optional[str]`) may be updated with details if errors occur during RAG tool execution or if the RAG tool itself returns an error.
-4.  **Handles Other Tools:** If a tool call is not for `RAG_TOOL_NAME`, it logs a warning and appends an error `PydanticToolResponse` indicating the tool is not handled by this specific execution path (for MVP).
-5.  **Returns Updated State:** The node returns the modified `AgentState`.
+### 2.4. Invocation within LangGraph
 
-The `state['rag_context']` is then available for subsequent nodes in the graph, typically an LLM node, to formulate a response grounded in the retrieved information. The fields `agent_turn_tool_calls` and `agent_turn_tool_responses` are primarily for logging and traceability of the agent's actions.
+*   **LLM Request:** The `llm_reasoner_node` gets an `AIMessage` from the LLM. If this message contains `tool_calls` with the name `RAG_TOOL_NAME`, the graph routes to `execute_rag_tool_node`.
+*   **Execution in `execute_rag_tool_node`:**
+    *   The node extracts the `args` dictionary (e.g., `{"query": "details on sepsis management"}`) from the LLM's tool call request.
+    *   It then calls the RAG tool: `await retrieve_knowledge_base_tool.ainvoke(tool_args_dict)`. The `@tool` decorator ensures `tool_args_dict` is correctly parsed into the `query` argument for the underlying function.
+*   **State Update:**
+    *   The direct output from `retrieve_knowledge_base_tool.ainvoke()` (the list of chunk dictionaries or error list) is stored as the `content` field of a `PydanticToolResponse` object. This `PydanticToolResponse` is then added to the `AgentState.executed_tool_responses` list. This structured logging is important for tracing and for constructing `ToolMessage` objects for subsequent LLM calls.
+    *   A simplified list, containing only the `chunk_text` strings from successfully retrieved chunks, is stored in `AgentState.rag_context`. This `rag_context` is often more convenient for direct inclusion in subsequent LLM prompts when synthesizing the final answer. If RAG fails or returns no results, `rag_context` will contain an appropriate message or an empty list.
+    *   Details of the tool call (`PydanticToolCall`) and the response (`PydanticToolResponse`) are also temporarily stored in `agent_turn_tool_calls` and `agent_turn_tool_responses` respectively, for logging the complete agent turn in `save_agent_interaction_node`.
 
-### Data Fidelity and Context
-The RAG tool plays a crucial role in maintaining data fidelity by:
-- **Grounding Responses:** Ensuring that the agent's responses are based on information from the verified knowledge base rather than solely on the LLM's parametric memory.
-- **Reducing Hallucinations:** By providing relevant context, the tool helps minimize the chances of the LLM generating incorrect or fabricated information.
-- **Access to Current Information:** If the knowledge base is kept up-to-date, the RAG tool allows the agent to access and utilize the latest information, which the LLM's training data might not include.
+### 2.5. Supporting ALETHIA_FIDELITY_CONSTRAINT (Truthfulness and Traceability)
 
-Regular updates to the underlying vector database or knowledge source are essential to ensure the continued accuracy and relevance of the information retrieved by this tool.
+The RAG tool is a cornerstone for ensuring the agent's responses are truthful and grounded in reliable information. Key aspects include:
+
+*   **Curated Knowledge Base:** The RAG system retrieves information exclusively from a project-defined, curated set of clinical documents, rather than the open internet or the LLM's general training data.
+*   **Source Attribution:** The `rag_service.retrieve_relevant_chunks` function (and therefore the `retrieve_knowledge_base_tool`) is designed to return the `source_document_name` (and potentially other metadata like page numbers if available) for each retrieved text chunk.
+*   **Availability to LLM:** This source information is part of the `tool_output_content` stored in `PydanticToolResponse` and can be implicitly available to the LLM if the `ToolMessage` content includes it, or explicitly if the prompt for synthesizing the answer (in `llm_reasoner_node` or a dedicated `response_generator_node`) instructs the LLM to refer to or cite sources from the provided `rag_context` or tool outputs.
+*   **Future Enhancement:** For more explicit traceability, the system could be enhanced to:
+    *   Always include source document names/links directly within the `rag_context` strings presented to the LLM.
+    *   Specifically prompt the LLM to cite sources in its final answer when information is derived from RAG.
+    *   Provide a UI mechanism for users to see the sources of information.
+
+This tool integration strategy ensures that the Noah.AI agent can effectively leverage its RAG capabilities, with a focus on providing accurate, traceable, and contextually relevant information to users.
