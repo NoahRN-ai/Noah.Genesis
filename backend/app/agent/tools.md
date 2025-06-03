@@ -81,18 +81,31 @@ The LLM uses this `VertexTool` definition (name, detailed description, and param
 
 ### LangGraph Integration
 
-The RAG tool (Python function `retrieve_knowledge_base_tool`) is executed within the LangGraph framework via a dedicated asynchronous node.
+The RAG tool (Python function `retrieve_knowledge_base_tool`) is executed within the LangGraph framework by the `execute_rag_tool_node` (asynchronous: `async def`) located in `backend/app/agent/graph.py`. This node handles all tool executions requested by the LLM.
 
-**Graph Node (`graph.py`):** `execute_rag_tool_node` (asynchronous: `async def`)
+**Graph Node (`graph.py`):** `execute_rag_tool_node`
 
-This node is responsible for:
-1. Receiving the agent's current state (`AgentState`).
-2. Extracting the query for the RAG tool from the state (e.g., from the latest message).
-3. Asynchronously invoking the Python tool function: `await retrieve_knowledge_base_tool.ainvoke({"query": query})`.
-4. Processing the returned `List[Dict[str, Any]]`.
-5. Updating the `AgentState`'s `rag_output: List[Dict[str, Any]]` field with these results.
+This node has the following key responsibilities when processing tool calls:
 
-The `rag_output` is then available for subsequent nodes in the graph.
+1.  **Receives Agent State:** Takes the current `AgentState` as input.
+2.  **Processes LLM Tool Calls:**
+    *   Retrieves the list of tool call requests from `state['llm_response_with_actions']`.
+    *   For each requested tool call:
+        *   Creates a `PydanticToolCall` object (from `tool_call_request.name`, `tool_call_request.args`, `tool_call_request.id`) and adds it to `state['agent_turn_tool_calls']` for logging.
+        *   If the `tool_name` matches `RAG_TOOL_NAME` ("retrieve_knowledge_base"):
+            *   Invokes the RAG tool asynchronously: `await retrieve_knowledge_base_tool.ainvoke(tool_args_dict)`.
+3.  **Handles RAG Tool Output and Updates State:**
+    *   The direct output from `retrieve_knowledge_base_tool.ainvoke()` (a `List[Dict[str, Any]]`) is stored as the `content` in a `PydanticToolResponse` object. This response object (along with those from any other tools called in the same turn) is added to `state['executed_tool_responses']` and `state['agent_turn_tool_responses']`.
+    *   `state['rag_context']` (a `List[str]`) is populated based on the RAG tool's output:
+        *   **Success:** Contains a list of `chunk_text` strings extracted from the successfully retrieved chunks.
+        *   **RAG Error:** Contains a message like `["Information retrieval failed: <error_details>"]`.
+        *   **No Results:** Contains a message like `["No specific information was found for your query in the knowledge base."]`.
+        *   **Unexpected Output:** Contains a message like `["There was an issue processing information from the knowledge base."]`.
+    *   `state['error_message']` (an `Optional[str]`) may be updated with details if errors occur during RAG tool execution or if the RAG tool itself returns an error.
+4.  **Handles Other Tools:** If a tool call is not for `RAG_TOOL_NAME`, it logs a warning and appends an error `PydanticToolResponse` indicating the tool is not handled by this specific execution path (for MVP).
+5.  **Returns Updated State:** The node returns the modified `AgentState`.
+
+The `state['rag_context']` is then available for subsequent nodes in the graph, typically an LLM node, to formulate a response grounded in the retrieved information. The fields `agent_turn_tool_calls` and `agent_turn_tool_responses` are primarily for logging and traceability of the agent's actions.
 
 ### Data Fidelity and Context
 The RAG tool plays a crucial role in maintaining data fidelity by:
