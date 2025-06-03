@@ -1,89 +1,114 @@
-# Agent Memory Mechanisms for Project Noah MVP
+# Noah.AI Agent Orchestration (`backend/app/agent/`)
 
-This document describes the Short-Term Memory (STM) and the explicitly simplified Long-Term Memory (LTM) mechanisms implemented for the Project Noah MVP AI agent. The design prioritizes functionality for the MVP while ensuring alignment with HIPAA considerations and leveraging `dynamous.ai` principles for efficiency.
+This directory contains the core logic for the Noah.AI agent, including its state management, memory mechanisms, tool definitions, and graph-based orchestration using LangGraph.
 
-## 1. Short-Term Memory (STM)
+## 1. Overview
 
-Short-Term Memory is essential for maintaining context within a single conversational session, allowing the agent to provide coherent, relevant, and multi-turn interactions.
+The Noah.RN agent is designed as a stateful conversational system built with LangGraph. Its primary capabilities for the MVP include:
+* Maintaining short-term conversation history via Firestore.
+* Reasoning using Large Language Models (LLMs) from Google Vertex AI.
+* Utilizing a Retrieval Augmented Generation (RAG) tool to access a curated clinical knowledge base for factual grounding.
+* Generating contextual and informed responses to user queries.
+* Persisting interactions for audit and potential future fine-tuning.
 
-### 1.1. STM Implementation: Firestore `InteractionHistory`
+The orchestration of these capabilities is managed by a `StateGraph` defined in `graph.py`.
 
-*   **Storage Medium:** STM is persisted in Google Cloud Firestore using the `interaction_history` collection. Each document within this collection meticulously records a single turn of a conversation (either a user's message or the agent's response).
-*   **Data Model & Structure:** The schema for these documents is rigorously defined by the `InteractionHistory` Pydantic model (refer to `backend/app/models/firestore_models.py`). Key fields relevant to STM include:
-    *   `interaction_id`: Unique ID for the interaction log entry (Firestore Document ID).
-    *   `session_id`: Groups interactions belonging to the same conversational session.
-    *   `user_id`: Identifies the user.
-    *   `timestamp`: Server-set UTC timestamp indicating when the interaction was logged. Crucial for ordering.
-    *   `actor`: (`USER` or `AGENT`) - Specifies the originator of the message.
-    *   `message_content`: The textual content. For an agent, this can be its direct reply or a message accompanying tool calls.
-    *   `tool_calls` (Agent only): A list of `ToolCall` Pydantic objects (`id: str`, `name: str`, `args: Dict[str, Any]`) if the agent decided to invoke tools. The `id` is a unique identifier for this specific tool invocation.
-    *   `tool_responses` (Agent only): A list of `ToolResponse` Pydantic objects (`tool_call_id: str`, `name: str`, `content: Any`) representing the outcomes of the tools called. The `tool_call_id` links back to the `id` of the corresponding `ToolCall`.
+## 2. Agent State (`state.py`)
 
-### 1.2. Core Memory Functions for LangGraph (`backend/app/agent/memory.py`)
+The `AgentState` (a `TypedDict`) defines the data structure that flows through and is modified by the LangGraph nodes. Key fields include:
 
-The STM is managed through the following core asynchronous functions, designed for seamless integration with LangGraph's state:
+* `user_input: str`: The most recent message from the user.
+* `session_id: str`: Identifier for the current conversation session.
+* `user_id: str`: Identifier for the authenticated user making the request.
+* `conversation_history: List[BaseMessage]`: A list of LangChain `BaseMessage` objects (e.g., `HumanMessage`, `AIMessage`, `ToolMessage`) representing the prior turns in the conversation. Loaded from Firestore.
+* `llm_response_with_actions: Optional[AIMessage]`: The direct output from the LLM, which is an `AIMessage`. This message may contain textual content for the user and/or `tool_calls` (a list of `langchain_core.tools.ToolCall` dicts) if the LLM decides to use a tool.
+* `executed_tool_responses: Optional[List[PydanticToolResponse]]`: A list of `PydanticToolResponse` objects. These store the actual outputs received after executing the tools requested by `llm_response_with_actions.tool_calls`. This is used to form `ToolMessage` objects for the next LLM reasoning step.
+* `rag_context: Optional[List[str]]`: A list of text strings (chunks) retrieved by the RAG tool, to be used by the LLM for grounding its response.
+* `final_response_text: Optional[str]`: The final textual response that will be sent to the user after all reasoning and tool use.
+* `error_message: Optional[str]`: Captures any error messages encountered during the graph's execution, which can be surfaced to the user or logged.
+* `agent_turn_tool_calls: Optional[List[PydanticToolCall]]`: Stores the `PydanticToolCall` representations of tools the LLM decided to invoke for the current agent turn. Used for persistent logging.
+* `agent_turn_tool_responses: Optional[List[PydanticToolResponse]]`: Stores the `PydanticToolResponse` representations of the actual outcomes of tool executions for the current agent turn. Used for persistent logging.
+* `agent_turn_interaction_id: Optional[str]`: The Firestore document ID where the agent's complete turn (final response, tool usage details) is saved via `memory.save_interaction()`.
 
-*   **`async def save_interaction(...) -> InteractionHistory`**
-    *   **Purpose:** Persists a single interaction turn to the Firestore `interaction_history` collection.
-    *   **Mechanism:** It accepts interaction details (session ID, user ID, actor, message content, and optional tool calls/responses as Pydantic models), constructs an `InteractionHistoryCreate` Pydantic object, and utilizes the `create_interaction_history_entry` service function from `firestore_service.py` to save it. The service layer ensures accurate timestamping for the record.
-    *   **LangGraph Role:** LangGraph will invoke this function to record each step of the conversation (user input, agent response, tool execution results) as it unfolds.
+## 3. Memory Management (`memory.py`)
 
-*   **`async def load_session_history(session_id: str, limit: int = 20) -> List[BaseMessage]`**
-    *   **Purpose:** Retrieves a sequence of recent interactions for a given `session_id` to serve as the conversational context for the LLM.
-    *   **Mechanism:**
-        1.  Queries Firestore (via `list_interaction_history_for_session`) for the `limit` most recent `InteractionHistory` documents for the `session_id`, sorted by their logging `timestamp` in descending order.
-        2.  Reverses this list to ensure the messages are in **chronological order** (oldest of the retrieved recent messages first), which is the standard format expected by LLMs.
-        3.  **Crucial Mapping to LangChain Messages:** Each `InteractionHistory` document is meticulously converted into a corresponding `langchain_core.messages.BaseMessage` object:
-            *   If `entry.actor == InteractionActor.USER`: Mapped to `HumanMessage(content=entry.message_content)`.
-            *   If `entry.actor == InteractionActor.AGENT`:
-                *   Mapped to `AIMessage(content=entry.message_content, tool_calls=[...])`.
-                *   The `tool_calls` attribute of `AIMessage` is populated by transforming each `PydanticToolCallModel` (from `entry.tool_calls`) into a dictionary with `id`, `name`, and `args`, as defined in our Pydantic model and expected by LangChain.
-                *   If `entry.tool_responses` are present (logged with the same agent turn), each `PydanticToolResponseModel` is then converted into a `ToolMessage(content=stringified_output, tool_call_id=..., name=...)`. The `tool_call_id` from the `PydanticToolResponseModel` correctly links it to the original `ToolCall`'s `id`. The `content` of `ToolMessage` is JSON stringified if it's a dictionary.
-    *   **LangGraph Role:** LangGraph will call this function to populate its state with the relevant conversation history before invoking the LLM or other agent components.
+Short-term memory is managed via Firestore, specifically the `interaction_history` collection.
+* **`save_interaction()`**: Persists individual user messages or complete agent turns (including textual response, any tools called, and their outputs) to Firestore.
+* **`load_session_history()`**: Retrieves recent conversation turns for a given session, converting them into LangChain `BaseMessage` objects to provide context to the LLM.
 
-### 1.3. STM Efficiency & `dynamous.ai` Contributions
+(More detailed STM/LTM strategies can be found in `backend/app/agent/memory.md` if it exists, or future LTM docs).
 
-*   **Context Window Management (`dynamous.ai` MVP Strategy):** The `limit` parameter in `load_session_history` is the primary mechanism for controlling the size of the STM provided to the LLM. This directly impacts:
-    *   **Performance:** Smaller context windows generally lead to faster LLM responses.
-    *   **Cost:** LLM token usage is often proportional to context size.
-    *   **Relevance:** Prevents overwhelming the LLM with very old, potentially irrelevant history for the current turn.
-*   **Database-Side Filtering (`dynamous.ai` Efficiency):** Retrieving only the required `limit` of messages directly from Firestore is more efficient than fetching extensive history and truncating it in the application.
-*   **Robust Message Mapping (`dynamous.ai` Clarity):** The explicit and careful mapping from stored Pydantic models (including the refined `ToolCall` with its `id` and `ToolResponse` with its `tool_call_id`) to LangChain's message types ensures that LangGraph receives state in the correct format. This is critical for reliable agent execution, especially for tool-using agents.
-*   **Future `dynamous.ai` Enhancements (Post-MVP):** While not in MVP scope, `dynamous.ai` capabilities could later be applied to implement more sophisticated STM management, such as dynamic summarization of older conversation turns within the loaded history if performance or context quality with simple limiting becomes a bottleneck.
+## 4. Tool Definitions (`tool_definitions.py`)
 
-## 2. Long-Term Memory (LTM) - MVP Scope & Simplification
+This file defines the tools available to the agent's LLM.
+* **Tool Schemas:** For MVP, it primarily defines the `retrieve_knowledge_base` tool (RAG_TOOL_NAME). The schema is structured for compatibility with Vertex AI's function calling capabilities (`vertexai.generative_models.Tool` and `FunctionDeclaration`).
+* **Helper Functions:**
+    * `get_available_tools_for_llm()`: Provides the list of `VertexTool` schemas to the `llm_reasoner_node`.
+    * `get_tool_names()`: Returns a list of string names for the available tools.
 
-Project Noah MVP V1.0 adopts a **radically simplified approach to LTM** to ensure rapid development and focus on core features.
+## 5. LangGraph Orchestration (`graph.py`)
 
-*   **Primary "Knowledge" LTM (Not Conversational): Retrieval Augmented Generation (RAG) - Task 1.4**
-    *   The agent's ability to access and reason over a curated knowledge base of critical care clinical information via RAG will serve as its primary long-term *knowledge* store.
-    *   This provides factual grounding for responses related to clinical topics but is **not** a memory of past user-specific conversations.
+The core agent logic is orchestrated by a `StateGraph` compiled from the following nodes and conditional edges.
 
-*   **Basic User-Specific Personalization LTM: `UserProfile.preferences` - Task 1.1**
-    *   The `preferences: Dict[str, Any]` field within the `UserProfile` Firestore documents allows storing simple key-value preferences for each user.
-    *   This data can be loaded and used to tailor LLM prompts or agent behavior (e.g., "Summarize information concisely as per user preference").
-    *   This is a very basic form of persistent user-specific memory, not a comprehensive conversational LTM.
+### 5.1. Critical Dependency: `llm_service.py` Refactor
 
-*   **Explicitly Out of Scope for MVP V1.0:**
-    *   Advanced LTM solutions like `Mem0`.
-    *   Vectorizing all past user interactions for semantic search-based conversational recall.
-    *   Any form of autonomous "learning" or model fine-tuning based on individual user conversations during the MVP phase.
+**IMPORTANT:** The `llm_reasoner_node` in `graph.py` **fundamentally relies on a refactored `llm_service.py` (from Task 1.3).** The `llm_service.get_llm_response()` function must be updated to:
+1.  Accept `tools_schema: Optional[List[VertexTool]]` to inform the LLM about available function calls.
+2.  Parse the LLM's response (e.g., from Vertex AI's `GenerateContentResponse.candidates[0].content.parts`) for both textual content and `FunctionCallPart` instances.
+3.  Return a structured object (e.g., a Pydantic model like `LLMServiceOutput` or a dictionary) that separates `text_content: Optional[str]` from `tool_calls: Optional[List[Dict[str, Any]]]`. Each item in `tool_calls` must be a dictionary compatible with LangChain's `AIMessage(tool_calls=...)` constructor (i.e., `{'name': str, 'args': Dict, 'id': str}`).
+Without this refactor, the agent will not be able to correctly identify or process tool usage requests from the LLM.
 
-This focused LTM strategy aligns with the "BUILD\_WORKING\_MVP\_FAST" mandate and defers complexity, ensuring the MVP delivers core value effectively.
+### 5.2. Graph Nodes
 
-## 3. HIPAA and Data Privacy for Conversational Memory (STM)
+* **`get_session_history_node(state: AgentState) -> AgentState`**:
+    * **Entry:** First operational node after initial state setup by the API.
+    * **Action:** Loads recent conversation history from Firestore using `memory.load_session_history()` and populates `state['conversation_history']`. Handles errors by setting `state['error_message']`.
+* **`llm_reasoner_node(state: AgentState) -> AgentState`**:
+    * **Action:** The primary decision-making unit. It constructs a list of `BaseMessage` objects (including history, previous `ToolMessage` results, and current user input) and calls `llm_service.get_llm_response()`, providing the available tool schemas.
+    * **Output:** Populates `state['llm_response_with_actions']` with an `AIMessage` containing the LLM's textual response and/or requested `tool_calls`. It also clears `executed_tool_responses` and `rag_context` from any previous iteration within the same graph invocation to prepare for new reasoning. Handles LLM call errors.
+* **`execute_rag_tool_node(state: AgentState) -> AgentState`**:
+    * **Trigger:** Invoked if the `llm_reasoner_node` requests the `RAG_TOOL_NAME`.
+    * **Action:** Extracts the query from the `tool_calls` in `state['llm_response_with_actions']`. Calls `rag_service.retrieve_relevant_chunks()`.
+    * **Output:** Populates `state['rag_context']` with retrieved text. Populates `state['executed_tool_responses']` with `PydanticToolResponse` objects (which will be used to create `ToolMessage`s for the next LLM call). It also populates `state['agent_turn_tool_calls']` and `state['agent_turn_tool_responses']` with Pydantic models for logging the current turn's tool usage.
+* **`final_response_generation_node(state: AgentState) -> AgentState`**:
+    * **Trigger:** Reached when the graph determines no more tool executions are needed for the current user query.
+    * **Action:** Sets `state['final_response_text']` based on the content of `state['llm_response_with_actions']` (if it contains no further tool calls) or an error message if one occurred.
+* **`save_agent_interaction_node(state: AgentState) -> AgentState`**:
+    * **Action:** Persists the agent's complete turn to Firestore using `memory.save_interaction()`. This includes `state['final_response_text']`, `state.get('agent_turn_tool_calls')`, and `state.get('agent_turn_tool_responses')`.
+    * **Output:** Populates `state['agent_turn_interaction_id']` with the Firestore ID of the saved interaction. Clears `agent_turn_tool_calls` and `agent_turn_tool_responses` post-saving.
 
-The `InteractionHistory` stored in Firestore contains conversational data that is sensitive and may constitute Protected Health Information (PHI), depending on the content shared by users.
+### 5.3. Graph Edges and Control Flow
 
-*   **Encryption:** All data in Firestore, including `InteractionHistory`, is encrypted at rest and in transit by Google Cloud by default.
-*   **Access Control:**
-    *   **IAM:** The backend service account (`sa-cloudrun-agent`) has restricted permissions to access Firestore (as defined in `terraform/project_iam.tf`).
-    *   **Firestore Security Rules (Critical - Task 4.1):** Fine-grained security rules will be implemented to ensure that:
-        *   Authenticated users can only access their own interaction history.
-        *   Authorized healthcare professionals (e.g., nurses) can only access interaction history relevant to patients under their care, based on robust authorization logic within the application.
-        *   Unauthorized access is strictly prevented.
-*   **Data Minimization:** While full conversation logging is necessary for STM and potential debugging, the system should avoid soliciting or encouraging users to share unnecessary PHI.
-*   **`Logos_Accord` Alignment:** The handling of `InteractionHistory` adheres to the principles of "Sanctity of Information" and "Privacy of the Soul" by ensuring data is protected, access is controlled, and the data pertains directly to the user's interaction with the system.
-*   **Auditability:** GCP Cloud Audit Logs, combined with application-level logging, will provide records of data access and system activity.
+The graph defines the sequence and conditional transitions between nodes:
 
-By implementing these STM mechanisms and adhering to these principles, Project Noah MVP will provide a contextually aware agent while maintaining necessary security and privacy standards for user interactions.
+1.  **START** -> `get_session_history_node`
+2.  `get_session_history_node` -> `llm_reasoner_node`
+3.  `llm_reasoner_node` -> **`should_execute_tools_router` (Conditional Edge)**:
+    * If `llm_response_with_actions` contains a call to `RAG_TOOL_NAME` -> `execute_rag_tool_node`
+    * If `llm_response_with_actions` contains calls to other (future, unsupported for MVP) tools -> `generate_final_response_node` (with a message indicating tool unavailability).
+    * If `llm_response_with_actions` contains no tool calls (direct answer) OR if a critical error is already in `state['error_message']` -> `generate_final_response_node`
+4.  `execute_rag_tool_node` -> `llm_reasoner_node` (The graph loops back to the LLM to process the tool's output and decide the next action – a common ReAct pattern).
+5.  `generate_final_response_node` -> `save_agent_interaction_node`
+6.  `save_agent_interaction_node` -> **END**
+
+### 5.4. Visual Diagram (Mermaid Syntax)
+
+```mermaid
+graph TD
+    UserInput[User Input via /chat API] --> SaveUserMessage[API: Save User Message];
+    SaveUserMessage --> PrepareInitialState[API: Prepare Initial AgentState];
+    PrepareInitialState --> InvokeGraph[API: Invoke Agent Graph];
+
+    subgraph Noah Agent Graph (LangGraph Execution)
+        direction LR
+        GraphStart[START] --> GetHistory(get_session_history_node);
+        GetHistory --> LLMReasoner{llm_reasoner_node};
+        LLMReasoner -- Tool Call for RAG? --> ExecuteRAG(execute_rag_tool_node);
+        LLMReasoner -- No Tool / Direct Answer / Error --> GenerateFinalResponse(final_response_generation_node);
+        ExecuteRAG -- Tool Output Ready --> LLMReasoner; subgraph ReAct Loop end
+        GenerateFinalResponse --> SaveAgentInteraction(save_agent_interaction_node);
+        SaveAgentInteraction --> GraphEnd[END];
+    end
+
+    InvokeGraph -- final_state (contains final_response_text) --> ReturnToUser[API: Return ChatResponse];
+```
