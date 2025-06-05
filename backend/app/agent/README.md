@@ -71,6 +71,30 @@ Project Noah MVP V1.0 adopts a **radically simplified approach to LTM** to ensur
 
 This focused LTM strategy aligns with the "BUILD\_WORKING\_MVP\_FAST" mandate and defers complexity, ensuring the MVP delivers core value effectively.
 
+## RAG-Powered Information Retrieval
+
+The agent incorporates a Retrieval Augmented Generation (RAG) capability to answer user queries by accessing a curated knowledge base. This feature is crucial for providing factual and contextually relevant information, especially for clinical questions.
+
+The RAG functionality is orchestrated within the LangGraph agent defined in `backend/app/agent/graph.py`. It involves the following key steps:
+
+1.  **Reasoning and Tool Decision (`llm_reasoner_node`):**
+    *   The agent first analyzes the user's query and conversation history to determine if the query can be best answered by accessing the knowledge base.
+    *   It uses a specialized prompt (see "Reasoner Prompt" in `prompts.md`) that incorporates the ReAct (Reason+Act) pattern. This prompt guides the LLM to decide whether to use the `retrieve_knowledge_base` tool.
+    *   If the tool is deemed necessary, the LLM formulates an optimized query string for the knowledge base.
+
+2.  **Knowledge Retrieval (Tool Execution):**
+    *   If the agent decides to use the tool, the `retrieve_knowledge_base` tool is executed (simulated in early versions, eventually calling `rag_service.py`).
+    *   This tool queries a vector database (e.g., Vertex AI Vector Search) containing embeddings of clinical documents and retrieves the most relevant text chunks.
+    *   The retrieved information is then passed back into the agent's state as `rag_context`.
+
+3.  **Synthesis and Response Generation (`rag_synthesis_node`):**
+    *   With the `rag_context` available, the agent uses another specialized prompt (see "RAG Synthesis Prompt" in `prompts.md`).
+    *   This prompt instructs the LLM to synthesize the retrieved information with the original user query and conversation history.
+    *   A core principle here is the `ALETHIA_FIDELITY_CONSTRAINT`, ensuring the answer is grounded in the retrieved knowledge and properly attributed (e.g., "According to the knowledge base...").
+    *   The LLM then generates a final, comprehensive response for the user.
+
+The entire RAG process is designed to align with the `Logos Accord`, emphasizing truthfulness, accuracy, and clear communication. Detailed prompt structures and their design rationale are documented in `backend/app/agent/prompts.md`. This approach allows Noah.AI to provide informative answers based on curated sources, enhancing its utility and trustworthiness for nursing professionals.
+
 ## 3. HIPAA and Data Privacy for Conversational Memory (STM)
 
 The `InteractionHistory` stored in Firestore contains conversational data that is sensitive and may constitute Protected Health Information (PHI), depending on the content shared by users.
