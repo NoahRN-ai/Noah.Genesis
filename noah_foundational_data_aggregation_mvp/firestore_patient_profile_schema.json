@@ -1,0 +1,15 @@
+{
+  "patientId": "string",
+  "name": "string",
+  "dob": "string",
+  "mrn": "string",
+  "allergies": ["string"],
+  "isolationPrecautions": "string",
+  "codeStatus": "string",
+  "admissionDate": "string",
+  "principalProblem": "string",
+  "emergencyContact": {
+    "name": "string",
+    "phone": "string"
+  }
+}
