@@ -16,40 +16,44 @@ This directory contains the MVP implementation of the Noah Patient Summary Agent
             *   `generate_summary_with_llm(context_data: dict, summary_type: str)`: Simulates a call to an LLM service. It constructs a textual summary based on the provided patient data, event logs, and RAG results.
         *   **API Endpoint (Flask):**
             *   `GET /summary/<patient_id>`: An HTTP endpoint that takes a `patient_id` and an optional `type` query parameter (e.g., `?type=nursing_note`). It gathers all necessary data, simulates RAG and LLM calls, and returns the generated summary as a JSON response.
-        *   **Direct Run Capability:** Includes an `if __name__ == "__main__":` block that allows running a simulation directly by calling functions if Flask server is not desired for a quick test.
+    *   **Direct Run Capability:** Includes an `if __name__ == "__main__":` block that allows running a simulation directly.
+    *   **Reusability for Other Agents:** Several functions within this script (e.g., `get_mock_patient_data`, `get_mock_event_logs`, `query_vertex_ai_search`, `generate_summary_with_llm`) and its mock data stores (`MOCK_PATIENT_PROFILES`, `MOCK_EVENT_LOGS`, `MOCK_CLINICAL_KB`) are designed to be importable and usable by other agent MVP scripts (like those in `noah_ai_report_structure_mvp` and `noah_handoff_summary_mvp`) to simulate deeper inter-agent communication and data sharing.
 
 2.  **`mock_clinical_kb.json`**
-    *   **Purpose:** A JSON file containing a few sample clinical knowledge base "documents".
-    *   **Content:** Each entry has an `id`, `title`, `content` (a brief description of a clinical topic like Sepsis, Pneumonia), and `keywords`. This file is used by the `query_vertex_ai_search` function to simulate RAG retrieval.
+    *   **Purpose:** A JSON file containing sample clinical knowledge base "documents" used by the `query_vertex_ai_search` function to simulate RAG retrieval.
+    *   **Content:** Each entry includes `id`, `title`, `content`, and `keywords`.
 
 3.  **`requirements.txt`**
-    *   **Purpose:** Lists the Python dependencies required for this project.
-    *   **Content:** Includes `Flask` for running the API endpoint.
+    *   **Purpose:** Lists Python dependencies.
+    *   **Content:** Includes `Flask` for the API endpoint.
 
 ## How to Run the Agent
 
 1.  **Install Dependencies:**
-    Open your terminal, navigate to the `noah_patient_summary_agent_mvp` directory, and run:
     ```bash
     pip install -r requirements.txt
     ```
 
 2.  **Run the Script:**
-    You have two options to run the agent:
-
     *   **Option A: Run the Flask API Server:**
-        To start the API server, open `patient_summary_agent.py`, uncomment the line `app.run(debug=True, port=5000)` (it's near the end of the file), and then run the script:
+        Uncomment `app.run(debug=True, port=5000)` in `patient_summary_agent.py` and run:
         ```bash
         python patient_summary_agent.py
         ```
-        The server will start, typically on `http://localhost:5000`.
-
+        The server will start on `http://localhost:5000`.
     *   **Option B: Run a Direct Simulation (No API Server):**
-        If you don't want to start the Flask server and just want to see the simulation output in the console, you can run the script as is (with the `app.run(...)` line commented out):
+        Run the script as is (with `app.run(...)` commented out):
         ```bash
         python patient_summary_agent.py
         ```
-        This will execute the example simulations defined in the `if __name__ == "__main__":` block.
+        This executes the `if __name__ == "__main__":` block simulations.
+
+## Integration with Other Agents
+
+As part of a larger MVP integration effort:
+*   The mock data stores (`MOCK_PATIENT_PROFILES`, `MOCK_EVENT_LOGS`, `MOCK_CLINICAL_KB`) and core logic functions (`get_mock_patient_data`, `query_vertex_ai_search`, `generate_summary_with_llm`) in `patient_summary_agent.py` are intended to be imported by other agent scripts.
+*   This allows other agents (e.g., for AI report structure generation or handoff summaries) to leverage this agent's data and summarization capabilities, simulating a more integrated system where agents call upon each other's services.
+*   When these functions are imported, `patient_summary_agent.py` itself is not run as a separate process but provides its functions and data to the importing script.
 
 ## How to Test the API Endpoint
 

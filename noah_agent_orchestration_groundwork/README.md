@@ -1,31 +1,35 @@
 # Noah Agent Orchestration Groundwork (MVP)
 
-This directory lays the conceptual groundwork for orchestrating the various MVP agents and modules developed for the Noah AI-Powered Shift Report system. It focuses on defining agent interfaces, illustrating basic interaction flows, and exploring how a formal orchestration layer (like LangGraph) could be applied.
+This directory lays the conceptual groundwork for orchestrating the various MVP agents and modules developed for the Noah AI-Powered Shift Report system. It focuses on defining agent interfaces that act as facades to the actual agent logic (simulated via Python imports), illustrating basic interaction flows, and exploring how a formal orchestration layer (like LangGraph) could be applied.
 
 ## File Index
 
 1.  **`agent_interfaces.py`**
-    *   **Purpose:** This Python script defines a set of placeholder functions (stubs) that simulate the core capabilities of the agents and data modules developed in previous steps.
-    *   **Content:**
-        *   `call_data_aggregation_firestore(patient_id)`: Simulates fetching a patient profile.
-        *   `call_data_aggregation_alloydb_events(patient_id, filters)`: Simulates fetching patient events.
-        *   `call_patient_summary_agent(profile, events, summary_type)`: Simulates generating a patient summary.
-        *   `call_shift_event_capture_agent(patient_id, details, event_type)`: Simulates logging a new clinical event.
-        *   `call_todo_list_manager(action, payload)`: Simulates interacting with the to-do list (e.g., adding, listing, updating tasks).
-    *   Each stub function currently returns hardcoded mock data or prints a message indicating its invocation, along with simulated status and data.
+    *   **Purpose:** This Python script defines a set of functions that act as a **facade** or a centralized interface to the core functionalities of the other MVP agent scripts.
+    *   **Functionality:**
+        *   It attempts to import actual functions and data stores (like `SHARED_MOCK_EVENTS_DB`) from the other agent MVP directories (e.g., `noah_patient_summary_agent_mvp`, `noah_shift_event_capture_agent_mvp`, etc.).
+        *   If imports are successful, the facade functions in this script will call the imported "real" agent logic.
+        *   If imports fail (e.g., due to path issues or the way the tool environment executes scripts), these functions fall back to simpler, local mock behavior.
+    *   **Key "Interface" Functions:**
+        *   `call_data_aggregation_firestore(patient_id)`: Fetches patient profiles (tries to use `patient_summary_agent`'s mocks).
+        *   `call_data_aggregation_alloydb_events(patient_id, filters)`: Fetches events (tries to use `events_log_data_prep`'s functions, which in turn access the shared event store from `shift_event_capture`).
+        *   `call_patient_summary_agent(profile, events, summary_type)`: Generates patient summaries (tries to use `patient_summary_agent`'s logic).
+        *   `call_shift_event_capture_agent(patient_id, details, event_type)`: Logs new events (tries to use `shift_event_capture`'s logic, updating the shared event store).
+        *   `call_todo_list_manager(action, payload)`: Manages To-Do tasks (tries to use `todo_list_manager`'s functions).
+    *   The script includes print statements to indicate whether it's using imported functions or local fallbacks.
 
 2.  **`conceptual_workflows.py`**
-    *   **Purpose:** This script demonstrates how the agent stubs from `agent_interfaces.py` can be combined to create high-level workflows.
+    *   **Purpose:** This script demonstrates how the facade functions from `agent_interfaces.py` can be combined to create high-level workflows, simulating more realistic inter-agent communication.
     *   **Content:**
-        *   Imports the stub functions from `agent_interfaces.py`.
+        *   Imports functions from `agent_interfaces.py`.
         *   Defines example workflows:
             *   `run_patient_intake_workflow(patient_id)`: Simulates fetching patient data and generating an intake summary.
-            *   `run_log_new_observation_workflow(patient_id, observation_text)`: Simulates logging an observation and then (conceptually) regenerating a patient summary.
+            *   `run_log_new_observation_workflow(patient_id, observation_text)`: Simulates logging an observation, then re-fetching data (which should include the new observation if shared data is working) and regenerating a patient summary.
             *   `run_add_todo_task_workflow(patient_id, task_description, priority)`: Simulates adding a task to the to-do list.
-        *   The `if __name__ == "__main__":` block executes these example workflows to show the sequence of calls and mock data flow.
+        *   The `if __name__ == "__main__":` block executes these example workflows. The output will show the sequence of calls and demonstrate the data flow, ideally reflecting the shared data and integrated agent calls.
 
 3.  **`langgraph_concepts.md`**
-    *   **Purpose:** A markdown document that explores how LangGraph, a library for building stateful, multi-actor applications, could be used to formalize and manage the orchestration of Noah agents.
+    *   **Purpose:** (No change in this step) A markdown document that explores how LangGraph could be used to formalize and manage the orchestration of Noah agents.
     *   **Content:**
         *   **Nodes:** Explains how each function in `agent_interfaces.py` can be mapped to a node in a LangGraph graph.
         *   **Edges:** Describes how the sequences of calls in `conceptual_workflows.py` imply edges (dependencies and data flow) between these nodes.

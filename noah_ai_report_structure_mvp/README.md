@@ -7,16 +7,16 @@ This directory contains the MVP definition for the data structures and mock data
 1.  **`report_data_generator.py`**
     *   **Purpose:** This Python script is responsible for generating mock data that would populate Sections I, II, and III of the AI shift report.
     *   **Functionality:**
-        *   **Mock Data Access:**
-            *   `get_mock_patient_profile(patient_id)`: Simulates fetching patient demographic and core data (like that from Firestore).
-            *   `get_mock_firestore_data(patient_id, data_key)`: Simulates fetching specific text-based data like "About Me" or "Our Goals" from Firestore.
-        *   **RAG Placeholder:**
-            *   `fetch_patient_history_summary_from_rag(patient_id)`: Simulates a call to a Retrieval Augmented Generation (RAG) system (conceptually linking to the `patient_summary_agent.py`'s RAG component) to fetch summarized past medical and surgical history.
+        *   **Integrated Mock Data Access:**
+            *   `get_mock_patient_profile(patient_id)`: Now attempts to fetch core patient profile data by importing and using mock data (`PSA_MOCK_PATIENT_PROFILES`) from `noah_patient_summary_agent_mvp/patient_summary_agent.py`. It augments this with additional details needed for Section II if they aren't present. Includes a local fallback if the import fails.
+            *   `get_mock_firestore_data(patient_id, data_key)`: Continues to simulate fetching specific text-based data like "About Me" or "Our Goals" from a local mock store, as this is specific to the report structure.
+        *   **Integrated RAG for Patient History:**
+            *   `fetch_patient_history_summary_from_rag(patient_id)`: Modified to simulate a more integrated call. It attempts to use imported functions (`psa_query_vertex_ai_search`, `psa_generate_summary_with_llm`) and data sources (`PSA_MOCK_PATIENT_PROFILES`, `PSA_MOCK_CLINICAL_KB`) from `noah_patient_summary_agent_mvp/patient_summary_agent.py` to generate a history-focused summary. This provides a more realistic simulation of how a dedicated summary agent might provide this information. Includes a local fallback.
         *   **Section Data Population:**
-            *   `populate_section_i_system_overview()`: Generates data for unit-wide information like shift details, nurse assignments, census, and urgent alerts.
-            *   `populate_section_ii_patient_identification(patient_id)`: Gathers and structures patient-specific identification data like name, MRN, DOB, allergies, code status, admission details, etc.
-            *   `populate_section_iii_patient_history(patient_id)`: Compiles patient history, including PMH/PSH from the RAG simulation, and editable fields like "About Me" and "Our Goals" from mock Firestore data.
-            *   `populate_section_v_systems_assessment(patient_id)`: This is the main function for Section V. It calls numerous sub-functions (`populate_neuro_assessment`, `populate_pulmonary_assessment`, etc.) to gather mock data for each physiological system. It returns a dictionary where keys are system names (e.g., "neurological") and values are the detailed assessment dictionaries for that system.
+            *   `populate_section_i_system_overview()`: (No change in this step) Generates data for unit-wide information.
+            *   `populate_section_ii_patient_identification(patient_id)`: (No change in its direct logic, but `get_mock_patient_profile` it calls is updated).
+            *   `populate_section_iii_patient_history(patient_id)`: (No change in its direct logic, but `fetch_patient_history_summary_from_rag` it calls is updated).
+            *   `populate_section_v_systems_assessment(patient_id)`: (No change in this step) Main function for Section V, calling sub-functions for each physiological system.
         *   **Input Handling Placeholder:**
             *   `save_to_firestore(patient_id, data_key, content)`: Simulates saving user-inputted content (e.g., for "About Me") back to Firestore. It currently prints the data that would be saved and updates the in-memory mock store for demonstration.
     *   **Usage:** The `if __name__ == "__main__":` block demonstrates how to call these functions to generate data for mock patients, including the new Section V, and simulate saving user input.

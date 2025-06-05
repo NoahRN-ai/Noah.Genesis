@@ -11,7 +11,7 @@ This directory contains the MVP implementation for the Noah Shift Event Capture 
             *   `load_event_schemas()`: Loads event definitions from `event_schemas.json`.
             *   `validate_event_details()`: Performs basic validation of event data against the loaded schemas (checks for required keys).
         *   **Database Interaction Placeholder:**
-            *   `store_event_in_alloydb(event_data: dict)`: Simulates writing event data to an AlloyDB `EventLogs` table. It currently prints the structured event data that would be sent to the database, including a generated `eventId` and ensuring the data is formatted into a `value` JSON blob.
+            *   `store_event_in_alloydb(event_data: dict)`: This function now simulates writing event data to a global Python dictionary named `SHARED_MOCK_EVENTS_DB` (keyed by `patient_id`). This shared store is intended to be accessible by other agent scripts (e.g., the events log display agent) for integrated MVP demonstration. It also prints the event data being "stored".
         *   **Speech-to-Text Placeholder:**
             *   `transcribe_voice_input(mock_audio_blob: str)`: Simulates a call to a Speech-to-Text service, returning mock transcribed text based on keywords in the input string.
         *   **Core Event Logging:**
@@ -44,28 +44,33 @@ This directory contains the MVP implementation for the Noah Shift Event Capture 
     The script will execute the example usage defined in its `if __name__ == "__main__":` block. You will see output in the console showing:
     *   Initialization messages (like schema loading).
     *   The details of each logged event.
-    *   The simulated database write operations (JSON blobs representing what would be stored in AlloyDB).
+    *   The simulated database write operations (now to `SHARED_MOCK_EVENTS_DB`).
     *   Simulated Speech-to-Text transcriptions.
 
 ## Event Structure and Handling
 
-*   **Core Event Object:** Each event logged by the system is structured as a dictionary containing:
-    *   `timestamp`: An ISO 8601 formatted UTC timestamp, automatically added when the event is logged.
-    *   `patient_id`: The ID of the patient related to the event (can be `None` for system-wide alerts).
+*   **Core Event Object (as stored in `SHARED_MOCK_EVENTS_DB`):** Each event is structured as a dictionary:
+    *   `event_id`: A unique UUID for the event.
+    *   `timestamp`: An ISO 8601 formatted UTC timestamp.
+    *   `patient_id`: The ID of the patient related to the event. System-wide alerts might use a special key like `_system_alerts`.
     *   `event_type`: A string categorizing the event (e.g., "vital_sign", "intervention").
-    *   `details`: A nested dictionary containing the specific information for that event type (e.g., for a vital sign, this would include `sign_name`, `value`, `unit`).
-    *   `source`: Indicates the origin of the event data (e.g., "ClinicalDevice_ManualEntry", "voice_transcription_note", "LabInformationSystem").
+    *   `details`: A nested dictionary containing the specific information for that event type.
+    *   `source`: Indicates the origin of the event data.
 
-*   **Schema Validation:** The `event_schemas.json` file provides a way to define expected fields for each `event_type`. The `validate_event_details` function currently checks if all `required_keys` specified in the schema are present in the `event_details`. This is a basic validation and can be extended.
+*   **Schema Validation:** The `event_schemas.json` file provides a way to define expected fields for each `event_type`. The `validate_event_details` function currently checks if all `required_keys` specified in the schema are present in the `event_details`.
 
-*   **Database Simulation:** The `store_event_in_alloydb` function simulates how an event would be stored. It creates a structure compatible with a hypothetical `EventLogs` table (as might be defined in `alloydb_schemas.sql` from previous work), including generating a unique `eventId` and packaging most of the event-specific data into a JSON `value` field.
+*   **Shared Mock Database (`SHARED_MOCK_EVENTS_DB`):**
+    *   The `store_event_in_alloydb` function now primarily writes events to the `SHARED_MOCK_EVENTS_DB` dictionary, which is defined globally in this script.
+    *   This change is intended to allow other MVP scripts (like `events_log_data_prep.py` from the Shift Events Log Display MVP) to access and display events captured by this agent, simulating a shared data layer for the purpose of MVP integration.
+    *   The structure of events stored includes `event_id`, `timestamp`, `patient_id`, `event_type`, `details`, and `source`.
 
 ## Important Notes
 
 *   **Simulations:**
-    *   **Speech-to-Text:** The `transcribe_voice_input` function is a placeholder. It does **not** call any actual Speech-to-Text service; it returns predefined text based on simple string matching in the mock audio blob identifier.
-    *   **AlloyDB Interaction:** The `store_event_in_alloydb` function is also a placeholder. It does **not** connect to or write to any actual database; it prints the data that would theoretically be persisted.
-*   **UUID for Event ID:** Each event intended for the database gets a unique `eventId` generated using `uuid.uuid4()`.
+    *   **Speech-to-Text:** The `transcribe_voice_input` function remains a placeholder.
+    *   **Database Interaction:** The `store_event_in_alloydb` function now writes to the in-memory `SHARED_MOCK_EVENTS_DB`. It does **not** connect to or write to any actual persistent database. This shared dictionary is for MVP demonstration of inter-agent data flow.
+*   **Cross-Script Data Sharing:** For `SHARED_MOCK_EVENTS_DB` to be truly shared during execution, scripts from other MVP directories would need to import it. This can be complex depending on the Python execution environment and path configurations. The `events_log_data_prep.py` script attempts this import with fallbacks.
+*   **UUID for Event ID:** Each event stored in `SHARED_MOCK_EVENTS_DB` gets a unique `event_id` generated using `uuid.uuid4()`.
 *   **Extensibility:** The system is designed to be extensible. New event types can be added by:
     1.  Defining their schema in `event_schemas.json`.
     2.  Optionally, creating new helper functions in `shift_event_capture.py` for easier logging of the new event type.

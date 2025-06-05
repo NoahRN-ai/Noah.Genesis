@@ -1,93 +1,131 @@
 import datetime
 import json
 from dateutil import parser as dateutil_parser # For parsing ISO dates if needed for filtering
+import sys
+import os
 
-# --- Mock Data Stores & Simplified Stubs ---
+# --- Attempt to import functions from other agents ---
+IMPORTED_SUMMARY_AGENT_MODULE = False
+IMPORTED_EVENTS_LOG_MODULE = False
 
-MOCK_PATIENT_PROFILES = {
+try:
+    current_script_path = os.path.dirname(os.path.realpath(__file__))
+    # Path to noah_patient_summary_agent_mvp
+    summary_agent_dir = os.path.join(os.path.dirname(current_script_path), "noah_patient_summary_agent_mvp")
+    if summary_agent_dir not in sys.path:
+        sys.path.insert(0, summary_agent_dir)
+    import patient_summary_agent
+    PSA_MODULE = patient_summary_agent
+    IMPORTED_SUMMARY_AGENT_MODULE = True
+    print(f"[{datetime.datetime.utcnow().isoformat()}] INFO: Successfully imported patient_summary_agent module.")
+except ImportError as e:
+    print(f"[{datetime.datetime.utcnow().isoformat()}] WARN: Could not import from patient_summary_agent.py: {e}. Using local stubs for profile & summary.")
+    PSA_MODULE = None # Placeholder if import fails
+
+try:
+    current_script_path = os.path.dirname(os.path.realpath(__file__))
+    # Path to noah_shift_events_log_display_mvp
+    events_log_dir = os.path.join(os.path.dirname(current_script_path), "noah_shift_events_log_display_mvp")
+    if events_log_dir not in sys.path:
+        sys.path.insert(0, events_log_dir)
+    import events_log_data_prep
+    ELD_MODULE = events_log_data_prep
+    IMPORTED_EVENTS_LOG_MODULE = True
+    print(f"[{datetime.datetime.utcnow().isoformat()}] INFO: Successfully imported events_log_data_prep module.")
+except ImportError as e:
+    print(f"[{datetime.datetime.utcnow().isoformat()}] WARN: Could not import from events_log_data_prep.py: {e}. Using local stubs for events.")
+    ELD_MODULE = None # Placeholder
+
+
+# --- Local Fallback Mock Data (if imports fail) ---
+LOCAL_MOCK_PATIENT_PROFILES = {
     "patient789": {
-        "patientId": "patient789",
-        "name": "Alice Johnson",
-        "dob": "1965-09-23",
-        "mrn": "MRN78910",
-        "allergies": ["Sulfa Drugs"],
-        "principalProblem": "Post-operative recovery (Appendectomy)",
-        "admissionDate": "2024-07-20T10:00:00Z",
-        "room_no": "401"
+        "patientId": "patient789", "name": "Alice Johnson (Local)", "dob": "1965-09-23", "mrn": "MRN78910",
+        "allergies": ["Sulfa Drugs"], "principalProblem": "Post-operative recovery (Appendectomy)",
+        "admissionDate": "2024-07-20T10:00:00Z", "room_no": "401"
     }
 }
-
-MOCK_SHIFT_EVENTS = {
+LOCAL_MOCK_SHIFT_EVENTS = {
     "patient789": [
-        {"timestamp": "2024-07-22T08:00:00Z", "event_type": "vital_sign", "details": {"sign_name": "Pain Score", "value": "2/10", "unit": ""}},
-        {"timestamp": "2024-07-22T09:15:00Z", "event_type": "intervention", "details": {"description": "Administered Acetaminophen 1g PO for mild pain."}},
-        {"timestamp": "2024-07-22T10:30:00Z", "event_type": "observation", "details": {"text_observation": "Patient ambulated to bathroom with SBA, tolerated well."}},
-        {"timestamp": "2024-07-22T12:00:00Z", "event_type": "vital_sign", "details": {"sign_name": "Temperature", "value": 37.0, "unit": "C"}},
-        {"timestamp": "2024-07-22T14:00:00Z", "event_type": "general_note", "details": {"note_content": "Incision site clean, dry, and intact. No signs of infection."}},
-        # Older events to test filtering
-        {"timestamp": "2024-07-21T20:00:00Z", "event_type": "observation", "details": {"text_observation": "Patient resting comfortably."}},
-        {"timestamp": "2024-07-21T18:00:00Z", "event_type": "vital_sign", "details": {"sign_name": "BP", "value": "130/75", "unit": "mmHg"}},
+        {"timestamp": "2024-07-22T13:00:00Z", "event_type": "vital_sign", "details": {"sign_name": "Pain Score", "value": "1/10", "unit": ""}},
+        {"timestamp": "2024-07-22T14:15:00Z", "event_type": "observation", "details": {"text_observation": "Patient resting (local data)."}}
     ]
 }
 
+# --- Stubs using imported modules or fallbacks ---
+
 def get_patient_profile_stub(patient_id: str) -> dict:
-    """Simulates fetching patient profile."""
-    print(f"[{datetime.datetime.utcnow().isoformat()}] STUB_FETCH_PROFILE: For patient_id: {patient_id}")
-    return MOCK_PATIENT_PROFILES.get(patient_id, {})
+    """Fetches patient profile, preferably from patient_summary_agent's data."""
+    print(f"[{datetime.datetime.utcnow().isoformat()}] HANDOFF_FETCH_PROFILE: For patient_id: {patient_id}")
+    if IMPORTED_SUMMARY_AGENT_MODULE:
+        # Use the MOCK_PATIENT_PROFILES from the imported module
+        profile = PSA_MODULE.MOCK_PATIENT_PROFILES.get(patient_id, {})
+        if profile: return profile # Return if found in imported module's data
+    # Fallback to local mock if import failed or patient not in imported data
+    return LOCAL_MOCK_PATIENT_PROFILES.get(patient_id, {})
+
 
 def get_recent_events_stub(patient_id: str, shift_duration_hours: int = 12) -> list:
-    """
-    Simulates fetching recent events for a patient from the last X hours.
-    Events are assumed to be sorted newest first in the mock store for simplicity if filtering were more complex.
-    For this stub, we'll filter based on the provided shift_duration_hours.
-    """
-    print(f"[{datetime.datetime.utcnow().isoformat()}] STUB_FETCH_EVENTS: For patient_id: {patient_id}, last {shift_duration_hours} hours.")
-    all_patient_events = MOCK_SHIFT_EVENTS.get(patient_id, [])
-    if not all_patient_events:
-        return []
-
-    now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc) # Ensure 'now' is offset-aware
-    cutoff_time = now - datetime.timedelta(hours=shift_duration_hours)
-
-    recent_events = [
-        event for event in all_patient_events
-        if dateutil_parser.isoparse(event["timestamp"]) >= cutoff_time
-    ]
-    # Typically, events are already sorted chronologically or reverse chronologically from DB.
-    # Here, ensure they are sorted for consistent summary generation if needed (newest first for this example)
-    recent_events.sort(key=lambda x: x["timestamp"], reverse=True)
-    print(f"[{datetime.datetime.utcnow().isoformat()}] STUB_FETCH_EVENTS: Found {len(recent_events)} recent events.")
-    return recent_events
+    """Fetches recent events, preferably using events_log_data_prep's logic."""
+    print(f"[{datetime.datetime.utcnow().isoformat()}] HANDOFF_FETCH_EVENTS: For patient_id: {patient_id}, last {shift_duration_hours} hours.")
+    if IMPORTED_EVENTS_LOG_MODULE:
+        # Construct filter_criteria for get_mock_shift_events
+        now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
+        start_time_iso = (now - datetime.timedelta(hours=shift_duration_hours)).isoformat()
+        filters = {"time_range": {"start": start_time_iso}}
+        # This function in events_log_data_prep now reads from SHARED_MOCK_EVENTS_DB (which itself might be imported or local)
+        return ELD_MODULE.get_mock_shift_events(patient_id, filter_criteria=filters)
+    else:
+        # Fallback to local mock if import failed
+        all_patient_events = LOCAL_MOCK_SHIFT_EVENTS.get(patient_id, [])
+        now = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc)
+        cutoff_time = now - datetime.timedelta(hours=shift_duration_hours)
+        recent_events = [
+            event for event in all_patient_events
+            if dateutil_parser.isoparse(event["timestamp"]) >= cutoff_time
+        ]
+        recent_events.sort(key=lambda x: x["timestamp"], reverse=True)
+        return recent_events
 
 def call_patient_summary_agent_for_handoff_stub(profile: dict, events: list) -> str:
-    """
-    Simulates calling the Patient Summary Agent to get a concise shift summary.
-    """
+    """Generates a handoff summary, preferably using patient_summary_agent's LLM stub."""
     patient_name = profile.get("name", "Unknown Patient")
-    print(f"[{datetime.datetime.utcnow().isoformat()}] STUB_AI_SUMMARY: Generating handoff summary for {patient_name}.")
+    print(f"[{datetime.datetime.utcnow().isoformat()}] HANDOFF_AI_SUMMARY: Generating for {patient_name} using Patient Summary Agent logic.")
 
-    summary_parts = [
-        f"Patient: {patient_name}, {profile.get('dob')}. Admitted: {profile.get('admissionDate', 'N/A')} for {profile.get('principalProblem', 'N/A')}.",
-        f"Allergies: {', '.join(profile.get('allergies', ['None Known']))}."
-    ]
-    if events:
-        summary_parts.append("Key events this shift:")
-        for event in events[:3]: # Include top 3 recent events for brevity
-            event_time = dateutil_parser.isoparse(event["timestamp"]).strftime("%H:%M")
-            if event["event_type"] == "vital_sign":
-                summary_parts.append(f"  - {event_time}: Vital: {event['details']['sign_name']} {event['details']['value']} {event['details']['unit']}")
-            elif event["event_type"] == "observation":
-                summary_parts.append(f"  - {event_time}: Obs: {event['details']['text_observation'][:50]}...")
-            elif event["event_type"] == "intervention":
-                 summary_parts.append(f"  - {event_time}: Intervention: {event['details']['description'][:50]}...")
-            else:
-                summary_parts.append(f"  - {event_time}: {event['event_type'].replace('_',' ').title()}: {str(event['details'])[:50]}...")
+    if IMPORTED_SUMMARY_AGENT_MODULE:
+        # We need to construct the context_data that psa_generate_summary_with_llm expects
+        # For this, we might also need RAG results. Let's simulate a simple RAG query or assume no RAG for this specific handoff summary.
+        rag_query_for_handoff = f"Key events and status for handoff regarding {profile.get('principalProblem', 'current stay')}"
+
+        # Use the imported psa_query_vertex_ai_search with its own MOCK_CLINICAL_KB
+        # The `patient_data` parameter for psa_query_vertex_ai_search is the profile.
+        rag_results_for_handoff = PSA_MODULE.query_vertex_ai_search(profile, rag_query_for_handoff)
+
+        context_data = {
+            "patient_profile": profile,
+            "event_logs": events, # These are the recent events passed in
+            "rag_results": rag_results_for_handoff
+        }
+        # Use the imported LLM stub
+        summary_str = PSA_MODULE.generate_summary_with_llm(context_data, summary_type="handoff_concise")
+        return summary_str
     else:
-        summary_parts.append("No significant events logged in the recent period for summary.")
-
-    return "\n".join(summary_parts)
+        # Fallback to simpler local summary generation if import failed
+        summary_parts = [
+            f"Patient: {patient_name}, {profile.get('dob')}. Admitted: {profile.get('admissionDate', 'N/A')} for {profile.get('principalProblem', 'N/A')}.",
+            f"Allergies: {', '.join(profile.get('allergies', ['None Known']))}."
+        ]
+        if events:
+            summary_parts.append("Key events this shift (local fallback logic):")
+            for event in events[:3]:
+                 event_time = dateutil_parser.isoparse(event["timestamp"]).strftime("%H:%M")
+                 summary_parts.append(f"  - {event_time}: {event.get('event_type','N/A')} - {str(event.get('details','N/A'))[:50]}")
+        else:
+            summary_parts.append("No significant events for local fallback summary.")
+        return "\n".join(summary_parts)
 
 # --- Text-to-Speech Placeholder ---
+# This remains local as it's specific to the handoff agent's function
 
 def call_tts_service_stub(text_to_speak: str, language_code: str = "en-US", patient_id: str = "default") -> str:
     """

@@ -1,8 +1,29 @@
 import json
 import datetime
 import uuid
+import os
+import sys
 
+# --- Shared Mock Event Store ---
+# This will be populated by store_event_in_alloydb
+# Keyed by patient_id, value is a list of event dicts
+SHARED_MOCK_EVENTS_DB = {}
+
+# --- Event Schemas ---
 EVENT_SCHEMAS = {}
+
+# For cross-script import if events_log_data_prep.py is in a different root
+# This might need adjustment based on how the execution environment handles paths.
+# Assuming they might be siblings in a larger 'noah_agents' directory for import.
+# If running scripts individually from their own directories, this path might need to be relative like '../../noah_shift_event_capture_agent_mvp'
+# For this subtask, we'll try a direct import path assuming a common root or adjusted PYTHONPATH.
+# If direct import fails, this part will be re-evaluated.
+
+def add_to_shared_events(patient_id: str, event_data: dict):
+    """Helper to add event to the shared store, ensuring patient_id key exists."""
+    if patient_id not in SHARED_MOCK_EVENTS_DB:
+        SHARED_MOCK_EVENTS_DB[patient_id] = []
+    SHARED_MOCK_EVENTS_DB[patient_id].append(event_data)
 
 def load_event_schemas(schema_file_path="event_schemas.json"):
     """Loads event schemas from the specified JSON file."""
@@ -54,17 +75,45 @@ def store_event_in_alloydb(event_data: dict):
     # The log_event function will prepare a structure that's close to this.
     # We might need a transformation step here if log_event's output isn't a direct match.
 
-    db_record = {
-        "eventId": str(uuid.uuid4()), # Generate a unique event ID
-        "patientId": event_data.get("patient_id"),
-        "eventType": event_data.get("event_type"),
-        "timestamp": event_data.get("timestamp"),
-        "value": json.dumps(event_data.get("details", event_data)), # Store all other data in 'value'
-        "source": event_data.get("source", "Unknown") # Ensure source is captured
-    }
+    # Structure for SHARED_MOCK_EVENTS_DB should be consistent with what
+    # events_log_data_prep.py expects.
+    # The `log_event` function already structures `full_event_data` with:
+    # "timestamp", "patient_id", "event_type", "details", "source"
+    # We'll add a unique "event_id" here as well.
 
-    print(f"[{datetime.datetime.utcnow().isoformat()}] SIMULATE_DB_WRITE (AlloyDB - EventLogs):")
-    print(json.dumps(db_record, indent=2))
+    # Make a copy to avoid modifying the dict passed to this function if it's reused
+    shared_event_record = event_data.copy()
+    shared_event_record["event_id"] = str(uuid.uuid4())
+
+
+    # Add to SHARED_MOCK_EVENTS_DB
+    patient_id = shared_event_record.get("patient_id")
+    if patient_id:
+        add_to_shared_events(patient_id, shared_event_record)
+        print(f"[{datetime.datetime.utcnow().isoformat()}] SIMULATE_DB_WRITE (SHARED_MOCK_EVENTS_DB): Event {shared_event_record['event_id']} for patient {patient_id} logged.")
+        print(f"  Current SHARED_MOCK_EVENTS_DB for {patient_id}: {SHARED_MOCK_EVENTS_DB[patient_id][-1]}") # Print last added event
+    else:
+        # Handle events without a patient_id (e.g., system alerts not tied to a patient)
+        # For now, we'll add them to a "general_events" key or similar if needed,
+        # or decide that all events must have a patient_id for this shared store.
+        # For this iteration, let's assume patient_id is generally present for patient-centric events.
+        # If an event truly has no patient_id, it might be logged elsewhere or handled differently.
+        # For system alerts that might have an optional patient_id, the calling function should decide.
+        if shared_event_record.get("event_type") == "alert_notification" and not patient_id:
+            # Example: store system-wide alerts under a specific key
+            system_alerts_key = "_system_alerts"
+            add_to_shared_events(system_alerts_key, shared_event_record)
+            print(f"[{datetime.datetime.utcnow().isoformat()}] SIMULATE_DB_WRITE (SHARED_MOCK_EVENTS_DB): System Alert {shared_event_record['event_id']} logged under '{system_alerts_key}'.")
+        else:
+            print(f"[{datetime.datetime.utcnow().isoformat()}] WARN_DB_WRITE: Event {shared_event_record['event_id']} lacks patient_id and is not a general system alert. Not added to SHARED_MOCK_EVENTS_DB by default.")
+
+
+    # The original print to simulate AlloyDB write can remain for conceptual clarity
+    # but the primary storage for this subtask's goal is SHARED_MOCK_EVENTS_DB.
+    # To avoid confusion, let's make it clear this is now primarily about the shared mock store.
+    # print(f"[{datetime.datetime.utcnow().isoformat()}] SIMULATE_DB_WRITE (AlloyDB - EventLogs):")
+    # print(json.dumps(db_record, indent=2)) # This was the old db_record structure
+
     # In a real implementation:
     # conn = get_alloydb_connection()
     # cursor = conn.cursor()

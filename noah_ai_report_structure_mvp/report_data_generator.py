@@ -1,40 +1,90 @@
 import json
 import datetime
+import sys
+import os
 
-# --- Mock Data Stores & Access Functions ---
+# --- Attempt to import functions from patient_summary_agent.py ---
+IMPORTED_PATIENT_SUMMARY_AGENT_FUNCTIONS = False
+try:
+    current_script_path = os.path.dirname(os.path.realpath(__file__))
+    # Path to noah_patient_summary_agent_mvp directory
+    summary_agent_dir = os.path.join(os.path.dirname(current_script_path), "noah_patient_summary_agent_mvp")
 
-MOCK_PATIENT_PROFILES = {
-    "patientA123": {
-        "patientId": "patientA123",
-        "name": "Eleanor Vance",
-        "dob": "1958-03-12",
-        "mrn": "MRN_EV001",
-        "room_no": "301A",
-        "allergies": ["Penicillin", "Latex"],
-        "isolationPrecautions": "Contact Precautions",
-        "codeStatus": "Full Code",
-        "admissionDate": "2024-07-10",
-        "principalProblem": "Congestive Heart Failure Exacerbation",
-        "consulting_physicians": ["Dr. Emily Carter (Cardiology)", "Dr. Ben Stern (Nephrology)"],
-        "emergencyContact": {"name": "Samuel Vance (Son)", "phone": "555-0101"}
-    },
-    "patientB456": {
-        "patientId": "patientB456",
-        "name": "Marcus Cole",
-        "dob": "1972-11-25",
-        "mrn": "MRN_MC002",
-        "room_no": "302B",
-        "allergies": ["None Known"],
-        "isolationPrecautions": "Standard",
-        "codeStatus": "DNR/DNI",
-        "admissionDate": "2024-07-15",
-        "principalProblem": "Community-Acquired Pneumonia",
-        "consulting_physicians": ["Dr. Anya Sharma (Pulmonology)"],
-        "emergencyContact": {"name": "Lena Cole (Wife)", "phone": "555-0202"}
+    if summary_agent_dir not in sys.path:
+        sys.path.insert(0, summary_agent_dir)
+
+    from patient_summary_agent import (
+        get_mock_patient_data as psa_get_mock_patient_data,
+        get_mock_event_logs as psa_get_mock_event_logs, # For context if needed by LLM
+        query_vertex_ai_search as psa_query_vertex_ai_search,
+        generate_summary_with_llm as psa_generate_summary_with_llm,
+        MOCK_PATIENT_PROFILES as PSA_MOCK_PATIENT_PROFILES, # Accessing its mock data
+        MOCK_EVENT_LOGS as PSA_MOCK_EVENT_LOGS,
+        MOCK_CLINICAL_KB as PSA_MOCK_CLINICAL_KB
+    )
+    IMPORTED_PATIENT_SUMMARY_AGENT_FUNCTIONS = True
+    print(f"[{datetime.datetime.utcnow().isoformat()}] INFO: Successfully imported functions from patient_summary_agent.py.")
+except ImportError as e:
+    print(f"[{datetime.datetime.utcnow().isoformat()}] WARN: Could not import from patient_summary_agent.py: {e}.")
+    print(f"[{datetime.datetime.utcnow().isoformat()}] WARN: report_data_generator.py will use its own local mocks for patient profiles and RAG summary.")
+    # Define local fallbacks if import fails
+    PSA_MOCK_PATIENT_PROFILES = {
+        "patientA123": {"patientId": "patientA123", "name": "Eleanor Vance (Local Fallback)", "dob": "1958-03-12", "principalProblem": "CHF", "allergies": ["Penicillin"]},
+        "patientB456": {"patientId": "patientB456", "name": "Marcus Cole (Local Fallback)", "dob": "1972-11-25", "principalProblem": "Pneumonia", "allergies": []}
     }
-}
+    PSA_MOCK_EVENT_LOGS = {} # Not strictly needed if RAG focuses on problem
+    PSA_MOCK_CLINICAL_KB = []
 
-MOCK_FIRESTORE_DATA = {
+
+# --- Consolidated Mock Data Stores & Access Functions ---
+# Use patient_summary_agent's mock data if available, otherwise use local fallbacks.
+
+def get_mock_patient_profile(patient_id: str) -> dict:
+    """
+    Fetches patient profile data. Uses imported data from patient_summary_agent if available.
+    This function in report_data_generator.py will now also add fields expected by Section II,
+    if they are not present in the profile from patient_summary_agent.
+    """
+    print(f"[{datetime.datetime.utcnow().isoformat()}] MOCK_DB_FETCH (Report Gen): Getting patient profile for {patient_id}")
+    if IMPORTED_PATIENT_SUMMARY_AGENT_FUNCTIONS:
+        # Fetch core profile from patient_summary_agent's data
+        base_profile = psa_get_mock_patient_data(patient_id) # This is actually direct dict access in psa
+        if not base_profile: # psa_get_mock_patient_data in summary agent returns None if not found
+             base_profile = PSA_MOCK_PATIENT_PROFILES.get(patient_id, {}) # Ensure we get a dict
+    else:
+        # Fallback to local mock if import failed
+        base_profile = PSA_MOCK_PATIENT_PROFILES.get(patient_id, {})
+
+    # Augment with additional fields needed for Section II, if not already present
+    # These are specific to how report_data_generator structures its Section II.
+    # This simulates fetching from different parts of an EMR or composing data.
+    extended_profile_details = {
+        "patientA123": {
+            "room_no": "301A", "isolationPrecautions": "Contact Precautions", "codeStatus": "Full Code",
+            "admissionDate": "2024-07-10",
+            "consulting_physicians": ["Dr. Emily Carter (Cardiology)", "Dr. Ben Stern (Nephrology)"],
+            "emergencyContact": {"name": "Samuel Vance (Son)", "phone": "555-0101"}
+        },
+        "patientB456": {
+            "room_no": "302B", "isolationPrecautions": "Standard", "codeStatus": "DNR/DNI",
+            "admissionDate": "2024-07-15",
+            "consulting_physicians": ["Dr. Anya Sharma (Pulmonology)"],
+            "emergencyContact": {"name": "Lena Cole (Wife)", "phone": "555-0202"}
+        }
+    }
+    # Merge base_profile with extended_details. Extended details can override if needed for Section II.
+    # Or, more carefully, only add if keys are missing from base_profile.
+    # For MVP, let's assume a simple merge, with extended_profile_details providing specific Section II fields.
+    final_profile = {**base_profile, **extended_profile_details.get(patient_id, {})}
+    # Ensure essential keys from base_profile are not lost if not in extended_profile_details
+    for key in ["patientId", "name", "dob", "mrn", "allergies", "principalProblem"]:
+        if key not in final_profile and key in base_profile:
+            final_profile[key] = base_profile[key]
+
+    return final_profile
+
+
+MOCK_FIRESTORE_DATA = { # Keep this local for "About Me", "Our Goals", etc.
     "patientA123": {
         "about_me": "Retired librarian, enjoys reading and classical music. Lives with her son. Values clear communication.",
         "our_goals": "Manage CHF symptoms, improve mobility, and return home with support.",
@@ -47,39 +97,96 @@ MOCK_FIRESTORE_DATA = {
     }
 }
 
-MOCK_RAG_HISTORY_SUMMARIES = {
-    "patientA123": {
-        "past_medical_history": "Hypertension (10 years), Type 2 Diabetes (5 years), Chronic Kidney Disease Stage 3 (2 years). Previous hospitalizations for CHF in 2022 and 2023.",
-        "surgical_history": "Appendectomy (1985), Cholecystectomy (2010)."
-    },
-    "patientB456": {
-        "past_medical_history": "Asthma (diagnosed in childhood, well-controlled), GERD.",
-        "surgical_history": "Tonsillectomy (childhood)."
-    }
-}
 
-def get_mock_patient_profile(patient_id: str) -> dict:
-    """Simulates fetching patient profile data."""
-    print(f"[{datetime.datetime.utcnow().isoformat()}] MOCK_DB_FETCH: Getting patient profile for {patient_id}")
-    return MOCK_PATIENT_PROFILES.get(patient_id, {})
-
-def get_mock_firestore_data(patient_id: str, data_key: str) -> dict:
+def get_mock_firestore_data(patient_id: str, data_key: str) -> dict: # Renamed from original to avoid conflict
     """Simulates fetching specific data (e.g., 'About Me') for a patient from Firestore."""
-    print(f"[{datetime.datetime.utcnow().isoformat()}] MOCK_DB_FETCH: Getting Firestore data for {patient_id}, key: {data_key}")
+    print(f"[{datetime.datetime.utcnow().isoformat()}] MOCK_DB_FETCH (Report Gen): Getting Firestore data for {patient_id}, key: {data_key}")
     patient_data = MOCK_FIRESTORE_DATA.get(patient_id, {})
-    return patient_data.get(data_key, f"No '{data_key}' data found for {patient_id}") # Return string if specific key missing
+    return patient_data.get(data_key, f"No '{data_key}' data found for {patient_id}")
 
-# --- RAG Integration Placeholder ---
+
+# --- RAG Integration using imported functions ---
 def fetch_patient_history_summary_from_rag(patient_id: str) -> dict:
     """
-    Simulates calling RAG (e.g., Vertex AI Search via patient_summary_agent.py)
-    to get relevant past medical/surgical history.
+    Uses imported functions from patient_summary_agent.py to simulate RAG
+    and generate a history-focused summary.
     """
-    print(f"[{datetime.datetime.utcnow().isoformat()}] MOCK_RAG_CALL: Fetching history summary for {patient_id}")
-    return MOCK_RAG_HISTORY_SUMMARIES.get(patient_id, {
-        "past_medical_history": "No RAG data found for past medical history.",
-        "surgical_history": "No RAG data found for surgical history."
-    })
+    print(f"[{datetime.datetime.utcnow().isoformat()}] RAG_CALL (Report Gen): Fetching history summary for {patient_id} via Patient Summary Agent logic.")
+
+    if not IMPORTED_PATIENT_SUMMARY_AGENT_FUNCTIONS:
+        print(f"[{datetime.datetime.utcnow().isoformat()}] RAG_CALL_WARN: Patient Summary Agent functions not imported. Using local RAG fallback.")
+        # Fallback to original MOCK_RAG_HISTORY_SUMMARIES if import failed
+        original_mock_rag = { # Keep a copy of the original simple mock for this fallback
+            "patientA123": {"past_medical_history": "Hypertension (10 years), Type 2 Diabetes (5 years).", "surgical_history": "Appendectomy (1985)."},
+            "patientB456": {"past_medical_history": "Asthma (childhood).", "surgical_history": "None."}
+        }
+        return original_mock_rag.get(patient_id, {
+            "past_medical_history": "Fallback: No RAG data.",
+            "surgical_history": "Fallback: No RAG data."
+        })
+
+    # 1. Get patient data (profile) using the imported function's data source
+    # patient_data_for_rag = psa_get_mock_patient_data(patient_id) # This is direct dict access in psa
+    patient_data_for_rag = PSA_MOCK_PATIENT_PROFILES.get(patient_id, {})
+    if not patient_data_for_rag:
+        return {"past_medical_history": "Patient profile not found for RAG.", "surgical_history": ""}
+
+    # 2. Formulate a query for RAG (e.g., based on principal problem or general history)
+    # The RAG in patient_summary_agent is more about finding relevant clinical KB for the *current problem*.
+    # For *history*, the RAG query might be different or we might use a different part of the LLM summary.
+    # Let's assume the "principalProblem" is a good starting point for a RAG query for relevant history context.
+    rag_query = f"Key historical context for {patient_data_for_rag.get('principalProblem', 'current condition')}"
+
+    # 3. Call the imported RAG query function
+    # Note: psa_query_vertex_ai_search in patient_summary_agent.py uses its own MOCK_CLINICAL_KB
+    # and patient_data_for_rag (which is MOCK_PATIENT_PROFILES from its own scope)
+    # We need to ensure it can be called correctly here.
+    # The `patient_data` param in `psa_query_vertex_ai_search` is `patient_data_for_rag` here.
+    rag_results = psa_query_vertex_ai_search(patient_data_for_rag, rag_query) # Uses PSA_MOCK_CLINICAL_KB
+
+    # 4. Get events for context (optional, but good for a comprehensive LLM call)
+    # event_logs_for_rag = psa_get_mock_event_logs(patient_id) # Also direct dict access in psa
+    event_logs_for_rag = PSA_MOCK_EVENT_LOGS.get(patient_id, [])
+
+
+    # 5. Construct context for the LLM, focusing on generating PMH/PSH
+    # The `generate_summary_with_llm` from patient_summary_agent is quite broad.
+    # We might want a more targeted prompt here if we were calling a real LLM.
+    # For this simulation, we'll call it and try to extract relevant parts, or make a specific type.
+    context_for_llm = {
+        "patient_profile": patient_data_for_rag,
+        "event_logs": event_logs_for_rag, # Could be empty if not relevant for pure history
+        "rag_results": rag_results
+    }
+
+    # Request a specific type of summary if the LLM stub supports it, or parse from a general one.
+    # Let's assume "history_recap" is a conceptual summary type.
+    llm_summary_response = psa_generate_summary_with_llm(context_for_llm, summary_type="history_recap")
+
+    # For this MVP, we'll parse the llm_summary_response string for PMH/PSH.
+    # This is a simplification; a real LLM call would be structured for this.
+    # Let's assume the llm_summary_response might contain sections like "Past Medical History:"
+    # For this stub, we'll just use the RAG results more directly or a simplified summary.
+
+    # Simplified approach for this step:
+    # Assume RAG results give us some keywords, and LLM crafts it.
+    # The current psa_generate_summary_with_llm doesn't explicitly break out PMH/PSH.
+    # So, let's construct a mock PMH/PSH from the RAG results for now.
+    pmh_parts = []
+    psh_parts = []
+    if rag_results:
+        for doc in rag_results:
+            # Crude check if title seems like PMH or PSH for this mock
+            if "protocol" in doc.get("title","").lower() or "management" in doc.get("title","").lower():
+                 pmh_parts.append(doc.get("title"))
+            else:
+                psh_parts.append(doc.get("title")) # Simplistic, just to show linkage
+
+    return {
+        "past_medical_history": f"Relevant conditions (simulated RAG via Patient Summary Agent): {', '.join(pmh_parts) if pmh_parts else 'None specified by RAG.'}. Based on query: '{rag_query}'",
+        "surgical_history": f"Procedures (simulated RAG via Patient Summary Agent): {', '.join(psh_parts) if psh_parts else 'None specified by RAG.'}"
+    }
+
 
 # --- Data Population Functions for Each Section ---
 
