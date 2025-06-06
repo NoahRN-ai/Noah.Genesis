@@ -1,0 +1,65 @@
+{
+  "vital_sign": {
+    "required_keys": ["sign_name", "value", "unit"],
+    "fields": {
+      "timestamp": "string (ISO 8601)",
+      "patient_id": "string",
+      "event_type": "string (must be 'vital_sign')",
+      "sign_name": "string (e.g., 'Heart Rate', 'Blood Pressure Systolic', 'Temperature')",
+      "value": "any (number or string)",
+      "unit": "string (e.g., 'bpm', 'mmHg', 'Celsius')"
+    }
+  },
+  "intervention": {
+    "required_keys": ["description"],
+    "fields": {
+      "timestamp": "string (ISO 8601)",
+      "patient_id": "string",
+      "event_type": "string (must be 'intervention')",
+      "description": "string (e.g., 'Administered medication', 'Assisted with ambulation')",
+      "medication_administered": {
+        "optional": true,
+        "fields": {
+          "name": "string",
+          "dosage": "string",
+          "route": "string"
+        }
+      },
+      "procedure_performed": {
+        "optional": true,
+        "type": "string (e.g., 'Wound dressing change', 'IV line insertion')"
+      }
+    }
+  },
+  "observation": {
+    "required_keys": ["text_observation", "source"],
+    "fields": {
+      "timestamp": "string (ISO 8601)",
+      "patient_id": "string",
+      "event_type": "string (must be 'observation')",
+      "text_observation": "string",
+      "source": "string (e.g., 'manual_text', 'voice_transcription', 'sensor_data')"
+    }
+  },
+  "general_note": {
+    "required_keys": ["note_content"],
+    "fields": {
+      "timestamp": "string (ISO 8601)",
+      "patient_id": "string",
+      "event_type": "string (must be 'general_note')",
+      "note_content": "string"
+    }
+  },
+  "alert_notification": {
+    "required_keys": ["alert_type", "message", "priority"],
+    "fields": {
+        "timestamp": "string (ISO 8601)",
+        "patient_id": "string (optional, if alert is patient-specific)",
+        "event_type": "string (must be 'alert_notification')",
+        "alert_type": "string (e.g., 'Critical Lab Value', 'Medication Due', 'System Alert')",
+        "message": "string (detailed message of the alert)",
+        "priority": "string (e.g., 'High', 'Medium', 'Low')",
+        "source_system": "string (e.g., 'Lab System', 'EMR', 'Monitoring Device')"
+    }
+  }
+}

@@ -220,6 +220,11 @@ class ContactPoint(BaseModel):
 # --- PatientProfile Model ---
 # Inspired by FHIR Patient resource
 
+class EmergencyContact(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None # Consider validating phone format if necessary in future
+    relationship: Optional[List[CodeableConcept]] = Field(default_factory=list) # Using list for multiple relationships if any
+
 class Gender(str, Enum):
     MALE = "male"
     FEMALE = "female"
@@ -233,6 +238,13 @@ class PatientProfileBase(BaseModel):
     gender: Optional[Gender] = Gender.UNKNOWN
     birthDate: Optional[datetime] = None # FHIR uses 'date' string, but datetime is more useful
     address: Optional[List[Address]] = Field(default_factory=list)
+    mrn: Optional[str] = None
+    allergies_text: Optional[List[str]] = Field(default_factory=list) # Simple text list of allergies
+    isolation_precautions: Optional[str] = None # E.g., "Contact", "Droplet"
+    code_status: Optional[CodeableConcept] = None # E.g., DNR, Full Code. Allows for coded value or text.
+    admission_date: Optional[datetime] = None # Consider if time part is relevant or just date
+    principal_problem: Optional[str] = None
+    emergency_contacts: Optional[List[EmergencyContact]] = Field(default_factory=list)
     # photo: Optional[Attachment] # Can add if needed, FHIR Attachment sub-model
     # managingOrganization: Optional[Reference] # FHIR Reference to Organization, if needed
     # maritalStatus: Optional[CodeableConcept] # If needed
@@ -259,6 +271,13 @@ class PatientProfileUpdate(BaseModel): # For partial updates
     gender: Optional[Gender] = None
     birthDate: Optional[datetime] = None
     address: Optional[List[Address]] = None
+    mrn: Optional[str] = None
+    allergies_text: Optional[List[str]] = None
+    isolation_precautions: Optional[str] = None
+    code_status: Optional[CodeableConcept] = None
+    admission_date: Optional[datetime] = None
+    principal_problem: Optional[str] = None
+    emergency_contacts: Optional[List[EmergencyContact]] = None
     # Any other fields from PatientProfileBase that should be updatable
 
 class PatientProfile(PatientProfileBase): # Represents a PatientProfile document read from DB

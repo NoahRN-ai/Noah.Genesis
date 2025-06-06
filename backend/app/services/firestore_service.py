@@ -2,6 +2,7 @@ from google.cloud.firestore_async import AsyncClient
 from google.cloud.firestore import Query, AsyncWriteBatch # For typed queries if needed later
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
+from pydantic import ValidationError
 
 from backend.app.models.firestore_models import (
     UserProfileCreate, UserProfileUpdate, UserProfile,
@@ -221,6 +222,77 @@ async def create_patient_profile(patient_id: str, profile_data: PatientProfileCr
     await doc_ref.set(profile_doc_data)
     # Construct the PatientProfile object for return
     return PatientProfile(patient_id=patient_id, created_at=current_time, updated_at=current_time, **profile_data.model_dump())
+
+
+async def create_patient_profile_from_dict(patient_id_from_dict: str, profile_raw_data: Dict[str, Any]) -> PatientProfile:
+    """
+    Creates a new patient profile document in Firestore from a raw dictionary.
+    This function parses the dictionary into PatientProfileCreate model,
+    handles necessary data transformations (like string to datetime),
+    and then calls the existing create_patient_profile service function.
+    """
+    try:
+        # Prepare data for PatientProfileCreate model
+        # Handle date conversions carefully
+        birth_date_str = profile_raw_data.get("birthDate") or profile_raw_data.get("dob")
+        if birth_date_str and isinstance(birth_date_str, str):
+            try:
+                # Attempt to parse ISO format, extend if other formats are common
+                profile_raw_data["birthDate"] = datetime.fromisoformat(birth_date_str.replace("Z", "+00:00"))
+            except ValueError:
+                # Handle or log parsing error; for now, we might pass None or raise
+                print(f"Warning: Could not parse birthDate string: {birth_date_str}")
+                profile_raw_data["birthDate"] = None # Or raise appropriate error
+
+        admission_date_str = profile_raw_data.get("admissionDate") or profile_raw_data.get("admission_date")
+        if admission_date_str and isinstance(admission_date_str, str):
+            try:
+                profile_raw_data["admissionDate"] = datetime.fromisoformat(admission_date_str.replace("Z", "+00:00"))
+            except ValueError:
+                print(f"Warning: Could not parse admissionDate string: {admission_date_str}")
+                profile_raw_data["admissionDate"] = None
+
+        # Handle emergency_contacts transformation
+        emergency_contact_dict = profile_raw_data.get("emergencyContact")
+        if emergency_contact_dict and isinstance(emergency_contact_dict, dict):
+            # Assuming EmergencyContact model takes name, phone
+            # Our EmergencyContact model has 'relationship' as Optional[List[CodeableConcept]]
+            # The input dict has name, phone. We'll map these.
+            profile_raw_data["emergency_contacts"] = [
+                {"name": emergency_contact_dict.get("name"), "phone": emergency_contact_dict.get("phone")}
+            ]
+        elif "emergency_contacts" not in profile_raw_data: # Ensure field exists for model if not provided
+             profile_raw_data["emergency_contacts"] = []
+
+
+        # Map other fields from the simpler schema to the richer PatientProfileCreate model
+        # mrn, allergies (as allergies_text), isolationPrecautions, codeStatus (as text), principalProblem
+        if "mrn" in profile_raw_data:
+            profile_raw_data["mrn"] = profile_raw_data["mrn"]
+        if "allergies" in profile_raw_data and isinstance(profile_raw_data["allergies"], list):
+            profile_raw_data["allergies_text"] = profile_raw_data["allergies"]
+        if "isolationPrecautions" in profile_raw_data:
+            profile_raw_data["isolation_precautions"] = profile_raw_data["isolationPrecautions"]
+        if "codeStatus" in profile_raw_data: # This should become a CodeableConcept
+            profile_raw_data["code_status"] = {"text": profile_raw_data["codeStatus"]}
+        if "principalProblem" in profile_raw_data:
+            profile_raw_data["principal_problem"] = profile_raw_data["principalProblem"]
+
+        # Ensure patient_id is part of the data for PatientProfileCreate model
+        # profile_raw_data["patient_id"] = patient_id_from_dict # patient_id is not part of PatientProfileCreate
+
+        profile_create_data = PatientProfileCreate(**profile_raw_data)
+
+        # Call the existing service function that takes the Pydantic model
+        return await create_patient_profile(patient_id=patient_id_from_dict, profile_data=profile_create_data)
+
+    except ValidationError as e:
+        print(f"ERROR: Validation error when creating PatientProfile from dict for patient {patient_id_from_dict}: {e}")
+        # In a real API, you'd raise an HTTPException here
+        raise # Re-raise for now, or handle appropriately
+    except Exception as e:
+        print(f"ERROR: Generic error when creating PatientProfile from dict for patient {patient_id_from_dict}: {e}")
+        raise # Re-raise for now
 
 async def get_patient_profile(patient_id: str) -> Optional[PatientProfile]:
     """Retrieves a patient profile document from Firestore by patient_id."""

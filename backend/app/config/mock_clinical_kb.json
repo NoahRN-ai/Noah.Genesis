@@ -1,0 +1,32 @@
+[
+  {
+    "id": "kb_001",
+    "title": "Sepsis Management Protocol",
+    "content": "Initiate early goal-directed therapy for severe sepsis and septic shock. Administer broad-spectrum antibiotics within 1 hour of recognition. Fluid resuscitation with crystalloids. Identify and control the source of infection. Monitor lactate levels.",
+    "keywords": ["sepsis", "septic shock", "antibiotics", "fluid resuscitation", "lactate"]
+  },
+  {
+    "id": "kb_002",
+    "title": "Pneumonia Standard Care Guidelines",
+    "content": "Assess severity using CURB-65 or PSI. Obtain cultures before antibiotics if possible. Empiric antibiotic therapy based on likely pathogens and local resistance patterns. Oxygen therapy to maintain SpO2 > 92%. Consider corticosteroids for severe community-acquired pneumonia.",
+    "keywords": ["pneumonia", "CURB-65", "antibiotics", "oxygen therapy", "corticosteroids"]
+  },
+  {
+    "id": "kb_003",
+    "title": "Diverticulitis Treatment Overview",
+    "content": "For uncomplicated diverticulitis, outpatient management with clear liquids and oral antibiotics (e.g., ciprofloxacin and metronidazole) is often sufficient. Hospitalization for complicated cases (abscess, perforation, obstruction). Pain management is crucial. Follow-up colonoscopy recommended after resolution.",
+    "keywords": ["diverticulitis", "antibiotics", "ciprofloxacin", "metronidazole", "colonoscopy"]
+  },
+  {
+    "id": "kb_004",
+    "title": "Hypertensive Emergency Management",
+    "content": "Gradual reduction of mean arterial pressure (MAP) by no more than 10-20% within the first hour, then a further 5-15% over the next 23 hours. IV antihypertensives (e.g., labetalol, nicardipine, sodium nitroprusside) are preferred. Avoid rapid drops in BP which can lead to ischemia.",
+    "keywords": ["hypertension", "hypertensive emergency", "MAP reduction", "IV antihypertensives"]
+  },
+  {
+    "id": "kb_005",
+    "title": "Acute Myocardial Infarction (MI) Initial Care",
+    "content": "Administer aspirin and antiplatelet therapy (e.g., clopidogrel or ticagrelor). Oxygen if SpO2 < 90%. Nitroglycerin for chest pain, unless contraindicated. Morphine for persistent pain. Beta-blockers within 24 hours if no contraindications. Early reperfusion therapy (PCI or fibrinolysis) is key.",
+    "keywords": ["myocardial infarction", "MI", "aspirin", "antiplatelet", "PCI", "fibrinolysis", "chest pain"]
+  }
+]
