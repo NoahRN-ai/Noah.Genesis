@@ -23,6 +23,42 @@ Each task should ideally follow this format:
 
 ---
 
+# Project Noah MVP V1.0 - Development Phases & Tasks
+
+This section tracks the high-level development tasks for Project Noah MVP V1.0, as outlined in the project requirements.
+
+## Phase 3: LLM & Agent Logic Integration (MVP)
+
+*   Task 3.3.A: RAG Info Retrieval – Prompting & Integration - **COMPLETE**
+*   Task 3.3.B: Note Drafting & Handoff Report (MVP Simplified) – Prompting - **COMPLETE**
+*   Task 3.3.C: Patient AI Summaries (MVP) & Prompt Documentation Finalization - **COMPLETE**
+
+## Phase 4: Compliance, Testing & Deployment (MVP)
+
+*   Task 4.1: HIPAA Compliance Safeguards (MVP Implementation) - **UP NEXT**
+    *   Sub-Item: Finalize and implement Firestore Security Rules for `UserProfile`, `InteractionHistory`, and `PatientDataLog` collections, ensuring users can only access their own data, and clinicians can access data for patients under their care (based on a defined relationship, e.g., a `patients_under_care` array in `UserProfile` for clinicians).
+    *   Sub-Item: Review and confirm all backend services interacting with PHI are doing so under appropriate authorization logic (e.g., checking clinician-patient relationships before fetching patient data).
+    *   Sub-Item: Ensure frontend components correctly manage user identity and only request data the user is authorized to see.
+    *   Sub-Item: Document the implemented safeguards and how they map to relevant HIPAA rules (Security Rule - Technical Safeguards).
+
+*   Task 4.2: Essential Unit & Integration Tests - **TO DO**
+    *   Sub-Item: Write unit tests for core agent logic, including prompt formatting and tool usage decisions (mocking LLM responses).
+    *   Sub-Item: Write integration tests for the main agent graph, verifying state transitions and tool integration.
+    *   Sub-Item: Write unit tests for critical Firestore service functions (e.g., `create_user_profile`, `get_patient_data_log`, `save_interaction`) using Firestore emulator or mocks.
+    *   Sub-Item: Write basic API integration tests for key endpoints (e.g., `/chat`, `/profile`).
+
+*   Task 4.3: Finalizing Codebase, Documentation, and GitHub Commit - **TO DO**
+    *   Sub-Item: Thoroughly review all code for clarity, consistency, and adherence to `noah_workspace_rules.json`.
+    *   Sub-Item: Ensure all new features and changes are documented in relevant READMEs (e.g., `backend/app/agent/README.md`, `backend/app/agent/prompts.md`).
+    *   Sub-Item: Update `tasks.md` to reflect the final status of all MVP tasks.
+    *   Sub-Item: Create a comprehensive commit message summarizing all changes for the MVP V1.0.
+    *   Sub-Item: Push all changes to the GitHub repository.
+
+*   Task 4.4: Deployment & Final Sanity Checks (Post-Commit to GitHub) - **TO DO**
+    *   Sub-Item: Deploy the updated backend (Cloud Run) and frontend (Firebase Hosting).
+    *   Sub-Item: Perform end-to-end sanity checks on the deployed application, covering all core MVP features (user registration, login, chat interaction, RAG, patient summaries, note drafting placeholders).
+    *   Sub-Item: Verify HIPAA safeguards are functioning as expected in the deployed environment.
+
 ## I. Backend Enhancements & Optimizations
 
 ### A. API and Core Logic

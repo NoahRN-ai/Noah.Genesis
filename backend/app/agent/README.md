@@ -71,7 +71,23 @@ Project Noah MVP V1.0 adopts a **radically simplified approach to LTM** to ensur
 
 This focused LTM strategy aligns with the "BUILD\_WORKING\_MVP\_FAST" mandate and defers complexity, ensuring the MVP delivers core value effectively.
 
-## 3. HIPAA and Data Privacy for Conversational Memory (STM)
+## 3. Core Agent Capabilities
+
+This section outlines the primary functional capabilities of the Noah agent.
+
+### Patient Data Summarization (Task 3.3.C)
+
+The agent can generate patient-friendly summaries of their recent health data. This is sourced from `PatientDataLog` entries.
+To achieve this, the agent utilizes the `fetch_patient_data_logs_tool` (defined in `backend/app/agent/memory.py`) to retrieve relevant log entries.
+The specific prompts used for generating these summaries are documented in `backend/app/agent/prompts.md`.
+
+### RAG Information Retrieval (Task 3.3.A)
+[Details about the RAG information retrieval capabilities, including relevant tools and prompt references, will be documented here.]
+
+### Note Drafting & Handoff Reports (Task 3.3.B)
+[Details about the agent's ability to assist with drafting nursing notes and handoff reports, including relevant tools and prompt references, will be documented here.]
+
+## 4. HIPAA and Data Privacy for Conversational Memory (STM)
 
 The `InteractionHistory` stored in Firestore contains conversational data that is sensitive and may constitute Protected Health Information (PHI), depending on the content shared by users.
 
