@@ -110,14 +110,14 @@ def run_add_todo_task_workflow(patient_id_for_task: str, task_description: str, 
     """
     Simulates adding a new task to the To-Do list.
     """
-    print(f"\n--- Starting Add To-Do Task Workflow for patient_id: {patient_id} ---")
+    print(f"\n--- Starting Add To-Do Task Workflow for patient_id: {patient_id_for_task} ---")
     print(f"  Task: '{task_description}', Priority: {priority}")
 
     # Step 1: Add the task
     add_task_payload = {
         "description": task_description,
         "priority": priority,
-        "patient_id": patient_id # Can also be "general" or other identifiers
+        "patient_id": patient_id_for_task # Can also be "general" or other identifiers
     }
     task_response = agents.call_todo_list_manager(action="add_task", payload=add_task_payload)
 
