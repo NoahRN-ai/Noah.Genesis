@@ -448,3 +448,40 @@ class AIContextualStore(AIContextualStoreBase): # Represents an AIContextualStor
 class Review(BaseModel):
     uuid: uuid.UUID = Field(default_factory=uuid.uuid4)
     # Add other fields here as needed for the Review model
+
+
+# --- Todo Models ---
+class TodoPriority(str, Enum):
+    URGENT = "Urgent"
+    HIGH = "High"
+    MEDIUM = "Medium"
+    LOW = "Low"
+
+class TodoStatus(str, Enum):
+    PENDING = "Pending"
+    COMPLETED = "Completed"
+
+class TodoBase(BaseModel):
+    patient_id: str = "general" # Can be a specific patient_id or "general" for general tasks
+    description: str
+    priority: TodoPriority = TodoPriority.MEDIUM
+    status: TodoStatus = TodoStatus.PENDING
+    # created_at and updated_at will be handled by the service on write
+
+    model_config = {
+        "use_enum_values": True
+    }
+
+class TodoCreate(TodoBase):
+    pass # Inherits all fields from TodoBase for creation
+
+class TodoUpdate(BaseModel): # For partial updates
+    description: Optional[str] = None
+    priority: Optional[TodoPriority] = None
+    status: Optional[TodoStatus] = None
+    patient_id: Optional[str] = None # Allow patient_id to be updated if necessary
+
+class Todo(TodoBase): # Represents a Todo document read from DB
+    todo_id: str # Document ID (Firestore document ID)
+    created_at: datetime
+    updated_at: datetime

@@ -8,18 +8,22 @@ from .firestore_service import get_patient_profile # Assuming PatientProfile and
 from .alloydb_data_service import AlloyDBDataService # For fetching events
 from .rag_service import RAGService
 from .llm_service import get_llm_response
+from .tts_service import TTSService # New import
 
 class PatientSummaryService:
     def __init__(self,
-                 # firestore_service: Any, # Will be properly injected
-                 alloydb_service: AlloyDBDataService, # Will be AlloyDBDataService instance or mock
+                 alloydb_service: AlloyDBDataService,
                  rag_service: RAGService,
-                 llm_service_func: Any # Will be get_llm_response
+                 llm_service_func: Any, # This is get_llm_response
+                 tts_service: TTSService # Added TTSService
                 ):
-        # self.firestore_service = firestore_service
+        # self.firestore_service = firestore_service # Not passed via init, get_patient_profile is imported directly
         self.alloydb_service = alloydb_service
         self.rag_service = rag_service
         self.get_llm_response = llm_service_func
+        self.tts_service = tts_service # Store TTSService instance
+        print(f"[{datetime.datetime.utcnow().isoformat()}] INFO (PatientSummaryService): Initialized with TTS.")
+
 
     async def generate_patient_summary(self, patient_id: str, summary_type: str) -> str:
         """
@@ -118,3 +122,74 @@ class PatientSummaryService:
 # alloy_serv = MockAlloyDBDataService() # Or AlloyDBDataService() once method is available
 # from backend.app.services.llm_service import get_llm_response_vertex # Specific LLM func
 # patient_summary_serv = PatientSummaryService(alloydb_service=alloy_serv, rag_service=rag_serv, llm_service_func=get_llm_response_vertex)
+
+    async def generate_handoff_report(self,
+                                      patient_id: str,
+                                      manual_priorities: List[str],
+                                      manual_monitoring_params: List[str],
+                                      shift_duration_hours: int = 12
+                                     ) -> Dict[str, Any]:
+        """
+        Generates a handoff report including AI summary, manual inputs, and TTS audio ref.
+        """
+        print(f"[{datetime.datetime.utcnow().isoformat()}] INFO (PatientSummaryService): Generating handoff report for {patient_id}")
+
+        # 1. Fetch Patient Profile (using direct import for now)
+        profile_model = await get_patient_profile(patient_id)
+        if not profile_model:
+            return {"error": f"Handoff Report Error: Patient ID {patient_id} not found."}
+        profile_dict = profile_model.model_dump(exclude_none=True)
+
+        # 2. Fetch Recent Events (using AlloyDBDataService)
+        # TODO: The original script had specific time filtering for events.
+        # list_events_for_patient in AlloyDBDataService has default limit/order, but not specific time window yet.
+        # For now, using default list; this could be enhanced in AlloyDBDataService.
+        recent_events = await self.alloydb_service.list_events_for_patient(patient_id, limit=15, descending=True)
+        print(f"[{datetime.datetime.utcnow().isoformat()}] INFO (PatientSummaryService): Fetched {len(recent_events)} recent events for handoff.")
+
+
+        # 3. Generate AI Summary part for handoff
+        # Using existing method, maybe a specific summary_type like "handoff_narrative"
+        ai_summary_text = await self.generate_patient_summary(patient_id, summary_type="handoff_narrative")
+        if "Error:" in ai_summary_text: # Basic error check from summary generation
+             print(f"[{datetime.datetime.utcnow().isoformat()}] WARN (PatientSummaryService): AI summary generation for handoff encountered an error: {ai_summary_text}")
+             # Decide if to proceed without AI summary or return error
+             # For now, continue and note missing AI summary
+
+        # 4. Construct text for TTS
+        tts_text_parts = [f"Handoff for patient {profile_dict.get('name', [{'text': ''}])[0].get('text', patient_id)}."]
+        if "Error:" not in ai_summary_text and ai_summary_text:
+            tts_text_parts.append(f"AI Summary: {ai_summary_text}")
+        else:
+            tts_text_parts.append("AI summary could not be generated for this handoff.")
+
+        if manual_priorities:
+            tts_text_parts.append("Key priorities are:")
+            for priority in manual_priorities:
+                tts_text_parts.append(priority) # Assuming priorities are full sentences
+        if manual_monitoring_params:
+            tts_text_parts.append("Parameters to monitor closely include:")
+            for param in manual_monitoring_params:
+                tts_text_parts.append(param)
+
+        full_tts_text = " ".join(tts_text_parts)
+
+        # 5. Call TTS Service
+        tts_response = await self.tts_service.synthesize_speech(full_tts_text, patient_id=patient_id)
+        voice_audio_ref = tts_response.get("audio_reference") if tts_response.get("status") == "success" else None
+
+        # 6. Construct final handoff data
+        handoff_data = {
+            "patient_id": patient_id,
+            "patient_name": profile_dict.get('name', [{'text': 'N/A'}])[0].get('text', 'N/A'),
+            "room_no": profile_dict.get("room_no", "N/A"), # Assuming room_no might be added to profile or fetched elsewhere
+            "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "ai_generated_shift_summary": ai_summary_text if "Error:" not in ai_summary_text else "N/A due to error.",
+            "top_priorities_for_incoming_nurse": manual_priorities,
+            "parameters_to_monitor_closely": manual_monitoring_params,
+            "voice_handoff_available": bool(voice_audio_ref),
+            "voice_handoff_audio_ref": voice_audio_ref
+        }
+
+        print(f"[{datetime.datetime.utcnow().isoformat()}] INFO (PatientSummaryService): Handoff data generation complete for {patient_id}.")
+        return handoff_data

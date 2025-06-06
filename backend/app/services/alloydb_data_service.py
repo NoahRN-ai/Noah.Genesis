@@ -166,14 +166,46 @@ class AlloyDBDataService:
              # Simulate a non-patient specific log or return an appropriate response
              return {"status": "warning", "message": "Alert logged (simulated, no patient_id specified)."}
 
-        async def list_events_for_patient(self, patient_id: str, limit: int = 50, order_by: str = "timestamp", descending: bool = True) -> List[Dict[str, Any]]:
+        async def list_events_for_patient(
+            self,
+            patient_id: str,
+            limit: int = 50,
+            order_by: str = "timestamp", # Default field to order by
+            descending: bool = True,      # Default order direction
+            event_type_filter: Optional[str] = None,
+            time_range_filter: Optional[Dict[str, str]] = None # Expected: {"start": "ISO_DATETIME_STR", "end": "ISO_DATETIME_STR"}
+        ) -> List[Dict[str, Any]]:
             """
             Placeholder for fetching a list of events for a patient from AlloyDB EventLogs table.
-            TODO: Implement actual AlloyDB query logic.
+            Supports filtering by event_type and time_range.
+            TODO: Implement actual AlloyDB query logic with these filters and proper ordering.
             """
-            print(f"[{datetime.datetime.utcnow().isoformat()}] INFO (AlloyDBService): Called list_events_for_patient for patientId: {patient_id} (Simulated - returning empty list)")
+            print(f"[{datetime.datetime.utcnow().isoformat()}] INFO (AlloyDBService): Called list_events_for_patient for patientId: {patient_id}")
+            print(f"  Filters: limit={limit}, order_by='{order_by}', descending={descending}, event_type='{event_type_filter}', time_range={time_range_filter}")
+
             # In a real implementation, this would query the AlloyDB 'EventLogs' table
-            # Example pseudo-code:
+            # incorporating the filters and ordering. For example:
+            # query_parts = ["SELECT eventId, patientId, eventType, timestamp, value, source FROM EventLogs WHERE patientId = %s"]
+            # params = [patient_id]
+            # if event_type_filter:
+            #     query_parts.append("AND eventType = %s")
+            #     params.append(event_type_filter)
+            # if time_range_filter:
+            #     if time_range_filter.get("start"):
+            #         query_parts.append("AND timestamp >= %s")
+            #         params.append(time_range_filter["start"])
+            #     if time_range_filter.get("end"):
+            #         query_parts.append("AND timestamp <= %s")
+            #         params.append(time_range_filter["end"])
+            #
+            # order_direction = "DESC" if descending else "ASC"
+            # # Ensure order_by column is safe (e.g., from a predefined list of allowed columns)
+            # safe_order_by = order_by if order_by in ["timestamp", "eventType", "source"] else "timestamp"
+            # query_parts.append(f"ORDER BY {safe_order_by} {order_direction} LIMIT %s")
+            # params.append(limit)
+            #
+            # final_query = " ".join(query_parts)
+            # Example: Fetch and return actual data
             # try:
             #   with get_alloydb_connection() as conn:
             #     with conn.cursor(row_factory=dict_row_factory) as cur: # Assuming rows returned as dicts
