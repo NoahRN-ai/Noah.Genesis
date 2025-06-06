@@ -423,3 +423,9 @@ class AIContextualStore(AIContextualStoreBase): # Represents an AIContextualStor
     # patient_id is inherited from AIContextualStoreBase and serves as the document ID.
     created_at: datetime # Set by service layer
     updated_at: datetime # Set by service layer
+
+
+# --- Review Model ---
+class Review(BaseModel):
+    uuid: uuid.UUID = Field(default_factory=uuid.uuid4)
+    # Add other fields here as needed for the Review model
