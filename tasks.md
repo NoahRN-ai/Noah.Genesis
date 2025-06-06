@@ -23,6 +23,41 @@ Each task should ideally follow this format:
 
 ---
 
+# Project Noah MVP V1.0 - Development Phases & Tasks
+
+This section tracks the high-level development tasks for Project Noah MVP V1.0, as outlined in the project requirements.
+
+## Phase 3: LLM & Agent Logic Integration (MVP)
+
+*   Task 3.3.A: RAG Info Retrieval – Prompting & Integration - **COMPLETE**
+*   Task 3.3.B: Note Drafting & Handoff Report (MVP Simplified) – Prompting - **COMPLETE**
+*   Task 3.3.C: Patient AI Summaries (MVP) & Prompt Documentation Finalization - **COMPLETE**
+
+## Phase 4: Compliance, Testing & Deployment (MVP)
+
+*   Task 4.1: HIPAA Compliance Safeguards (MVP Implementation) - **COMPLETE**
+    *   Sub-Item: Firestore Security Rules for relevant collections defined in `firestore.rules`.
+    *   Sub-Item: Backend services and data handling code reviewed for PHI considerations.
+    *   Sub-Item: API endpoint protection (authN) confirmed; authorization for self-access reviewed (gaps noted for `POST /patient_data` and full RBAC).
+    *   Sub-Item: `HIPAA_MVP_Checklist.md` generated, documenting implemented safeguards and findings.
+
+*   Task 4.2: Essential Unit & Integration Tests - **IN PROGRESS (Unit Tests Complete)**
+    *   (Integration tests and testing strategy documentation are pending based on user feedback to switch tasks).
+    *   Sub-Item: Unit tests for core agent logic (memory.py) written. **- COMPLETE**
+    *   Sub-Item: Integration tests for the main agent graph, verifying state transitions and tool integration. **- PENDING**
+    *   Sub-Item: Unit tests for critical Firestore service functions, LLM service, and RAG service written. **- COMPLETE**
+    *   Sub-Item: Unit tests for API endpoints (chat, patient_data, history, user_profiles) and core security components written. **- COMPLETE**
+
+*   Task 4.3: Finalizing Codebase, Documentation, and GitHub Commit - **COMPLETE**
+    *   Sub-Item: Conceptual review of recent code and documentation performed.
+    *   Sub-Item: Root `README.md` created/updated with comprehensive project information.
+    *   Sub-Item: `.gitignore` file created with standard patterns.
+    *   Sub-Item: `scripts/git_initial_commit.sh` generated for user handoff.
+
+*   Task 4.4: Deployment & Final Sanity Checks (Post-Commit to GitHub) - **COMPLETE (AI IDE Actions)**
+    *   Sub-Item: `cloudbuild.yaml` configuration reviewed and analyzed.
+    *   Sub-Item: `DEPLOYMENT.md` file created with deployment instructions and considerations.
+
 ## I. Backend Enhancements & Optimizations
 
 ### A. API and Core Logic

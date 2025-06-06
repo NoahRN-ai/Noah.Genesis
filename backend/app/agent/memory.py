@@ -1,8 +1,11 @@
 import json
 from typing import List, Optional, Dict, Any
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
+from langchain_core.tools import tool
+from datetime import datetime
 
 from backend.app.models.firestore_models import (
+    PatientDataLog,
     InteractionActor,
     ToolCall as PydanticToolCallModel, # Intended: name, args, id
     ToolResponse as PydanticToolResponseModel, # Intended: tool_call_id, name, content
@@ -11,7 +14,8 @@ from backend.app.models.firestore_models import (
 )
 from backend.app.services.firestore_service import (
     create_interaction_history_entry,
-    list_interaction_history_for_session
+    list_interaction_history_for_session,
+    list_patient_data_logs_for_user
 )
 
 async def save_interaction(
@@ -93,3 +97,36 @@ async def load_session_history(session_id: str, limit: int = 20) -> List[BaseMes
                         name=pydantic_tr.name # Directly from PydanticToolResponseModel
                     ))
     return langchain_messages
+
+
+@tool
+async def fetch_patient_data_logs_tool(patient_user_id: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """
+    Fetches a list of patient data logs for a given user.
+
+    Args:
+        patient_user_id: The ID of the patient whose data logs are to be fetched.
+        limit: The maximum number of log entries to retrieve. Defaults to 5.
+
+    Returns:
+        A list of dictionaries, where each dictionary represents a patient data log
+        entry with selected fields (log_id, timestamp, data_type, content, source, created_at).
+        Timestamps are formatted as ISO 8601 strings.
+    """
+    logs: List[PatientDataLog] = await list_patient_data_logs_for_user(
+        user_id=patient_user_id,
+        limit=limit,
+        order_by="timestamp",
+        descending=True
+    )
+    processed_logs = []
+    for log in logs:
+        processed_logs.append({
+            "log_id": log.id,
+            "timestamp": log.timestamp.isoformat() if log.timestamp else None,
+            "data_type": log.data_type.value if log.data_type else None, # Assuming data_type is an Enum
+            "content": log.content,
+            "source": log.source,
+            "created_at": log.created_at.isoformat() if log.created_at else None,
+        })
+    return processed_logs
