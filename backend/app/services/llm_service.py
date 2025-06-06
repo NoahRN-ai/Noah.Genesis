@@ -8,18 +8,22 @@ from vertexai.generative_models import (
     GenerativeModel,
     Part,
     Content,
-    FunctionCall, # For constructing tool_call parts if received in history
-    FunctionResponse, # For constructing tool_response parts if received in history
+    FunctionCall as VertexFunctionCall, # Aliased to avoid conflict with our FirestoreToolCall
+    FunctionResponse,
     HarmCategory,
     HarmBlockThreshold,
     GenerationConfig
 )
 from google.api_core import exceptions as google_exceptions
+# from google.protobuf.json_format import MessageToDict # For potential complex Struct conversion
+
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 
 from tenacity import retry, stop_after_attempt, wait_random_exponential, retry_if_exception_type
 
 from backend.app.core.exceptions import LLMError, LLMConnectionError, LLMResponseError, InvalidInputError
+from backend.app.models.api_models import LLMOutput
+from backend.app.models.firestore_models import ToolCall as FirestoreToolCall
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -75,14 +79,14 @@ def _convert_lc_messages_to_vertex_content(
                 model_parts = []
                 if lc_msg.content and isinstance(lc_msg.content, str) and lc_msg.content.strip():
                     model_parts.append(Part.from_text(lc_msg.content))
-                if lc_msg.tool_calls:
+                if lc_msg.tool_calls: # LangChain tool_calls are dicts: {'name': str, 'args': Dict, 'id': str}
                     for tc in lc_msg.tool_calls:
                         args_dict = tc.get("args", {})
                         if not isinstance(args_dict, dict):
                            try: args_dict = json.loads(str(args_dict)) if isinstance(args_dict, str) else dict(args_dict)
                            except: args_dict = {}
                         model_parts.append(Part.from_function_call(
-                            FunctionCall(name=tc["name"], args=args_dict)
+                            VertexFunctionCall(name=tc["name"], args=args_dict) # Use aliased VertexFunctionCall
                         ))
                 if model_parts:
                     vertex_contents.append(Content(role="model", parts=model_parts))
@@ -128,8 +132,8 @@ async def _generate_content_with_retry(
     contents: List[Content],
     generation_config: GenerationConfig,
     safety_settings: Dict[HarmCategory, HarmBlockThreshold],
-    tools: Optional[List[Any]] = None
-) -> Any:
+    tools: Optional[List[Any]] = None # Vertex AI Tool schema
+) -> Any: # vertexai.generative_models.GenerateContentResponse
     try:
         logger.debug(f"Sending to Vertex AI GenModel.generate_content. Contents: {contents}, Tools: {tools is not None}")
         if tools:
@@ -159,8 +163,8 @@ async def get_llm_response(
     llm_model_name: Optional[str] = None,
     generation_config_override: Optional[GenerationConfig] = None,
     safety_settings_override: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None,
-    tools_schema: Optional[List[Any]] = None
-) -> str:
+    tools_schema: Optional[List[Any]] = None # Vertex AI Tool schema
+) -> LLMOutput:
     if not _vertex_ai_initialized:
         logger.error("Vertex AI not initialized. Cannot get LLM response.")
         raise LLMConnectionError(detail="LLM service not available (Vertex AI not initialized).")
@@ -173,8 +177,7 @@ async def get_llm_response(
 
         if not vertex_content_list:
             logger.warning("No content to send to LLM (empty prompt and history).")
-            # Consider raising InvalidInputError if prompt is essential
-            return ""
+            return LLMOutput(text=None, tool_calls=None) # Return empty structured output
 
         current_generation_config = generation_config_override if generation_config_override else DEFAULT_GENERATION_CONFIG
         current_safety_settings = safety_settings_override if safety_settings_override else DEFAULT_SAFETY_SETTINGS
@@ -192,23 +195,40 @@ async def get_llm_response(
             raise LLMResponseError(detail=f"LLM response was blocked or empty. Finish reason: {response.prompt_feedback.block_reason if response.prompt_feedback else 'Unknown'}")
 
         first_candidate = response.candidates[0]
+        extracted_text_parts = []
+        extracted_tool_calls = []
+
         if first_candidate.content and first_candidate.content.parts:
-            all_text_parts = []
             for part in first_candidate.content.parts:
                 if hasattr(part, 'text') and part.text:
-                    all_text_parts.append(part.text)
+                    extracted_text_parts.append(part.text)
 
-            if all_text_parts:
-                return "".join(all_text_parts)
-            elif any(hasattr(part, 'function_call') for part in first_candidate.content.parts):
-                logger.info(f"LLM for model {current_model_name} returned function call(s) without accompanying text.")
-                return "" # Or some indicator, this part will be revisited with BE-LLM-001
-            else:
-                logger.warning(f"LLM response candidate for model {current_model_name} had parts but no parsable text or function calls.")
-                return ""
+                if hasattr(part, 'function_call') and part.function_call:
+                    # part.function_call is a VertexFunctionCall object
+                    # Convert its 'args' (a Struct) to a dict for our FirestoreToolCall model
+                    # dict() constructor works directly for simple Structs.
+                    # For nested Structs, a more robust conversion might be needed (e.g., MessageToDict)
+                    # but for typical flat tool args, this should be okay.
+                    try:
+                        converted_args = dict(part.function_call.args)
+                    except Exception as e:
+                        logger.error(f"Failed to convert Vertex FunctionCall.args to dict: {e}. Args: {part.function_call.args}", exc_info=True)
+                        converted_args = {} # Default to empty dict on conversion error
 
-        logger.warning(f"LLM response for model {current_model_name} was empty or in an unexpected format.")
-        return ""
+                    firestore_tool_call = FirestoreToolCall(
+                        name=part.function_call.name,
+                        args=converted_args
+                        # FirestoreToolCall auto-generates an ID if not provided
+                    )
+                    extracted_tool_calls.append(firestore_tool_call)
+
+        final_text = "".join(extracted_text_parts) if extracted_text_parts else None
+        final_tool_calls = extracted_tool_calls if extracted_tool_calls else None
+
+        if final_text is None and final_tool_calls is None:
+             logger.warning(f"LLM response for model {current_model_name} resulted in no parsable text or tool calls from parts: {first_candidate.content.parts}")
+
+        return LLMOutput(text=final_text, tool_calls=final_tool_calls)
 
     except google_exceptions.RetryError as e:
         logger.error(f"LLM call failed after multiple retries for model {current_model_name}: {e.last_attempt.exception()}", exc_info=True)
@@ -219,6 +239,6 @@ async def get_llm_response(
     except google_exceptions.PermissionDenied as e:
         logger.error(f"LLM call failed due to PermissionDenied for model {current_model_name}: {e}", exc_info=True)
         raise LLMConnectionError(detail=f"Permission denied for LLM service: {e}. Check service account permissions for Vertex AI.")
-    except Exception as e: # Catch-all for other unexpected errors
+    except Exception as e:
         logger.error(f"Unexpected error in get_llm_response for model {current_model_name}: {e}", exc_info=True)
         raise LLMError(detail=f"An unexpected error occurred with the LLM service: {type(e).__name__} - {e}")
