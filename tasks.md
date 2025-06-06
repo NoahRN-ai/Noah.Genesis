@@ -342,6 +342,22 @@ Define the corresponding API endpoints and payload types (`frontend/src/types/ap
 **ID:** `TEST-FE-001`
 **Title:** Set Up Frontend Testing Framework
 **Description:** No frontend tests were observed. Set up a testing framework for the React frontend (e.g., Jest with React Testing Library). Start by writing unit tests for critical components (e.g., `AuthContext`, UI components involved in core workflows) and services (`apiClient.ts`, `chatApiService.ts`).
+    *   **`TEST-FE-001.1`**: **Install and Configure Testing Libraries:**
+        *   Description: Install Jest, React Testing Library (`@testing-library/react`), and necessary dependencies (`@testing-library/jest-dom`, `ts-jest`, `identity-obj-proxy` for CSS modules, etc.).
+        *   Configure Jest in `package.json` or `jest.config.js` (e.g., `testEnvironment: 'jsdom'`, `setupFilesAfterEnv` for global mocks/setup, moduleNameMapper for static assets).
+        *   Status: Open
+    *   **`TEST-FE-001.2`**: **Create Initial Test Setup File:**
+        *   Description: Create a setup file (e.g., `src/setupTests.ts`) to include global imports like `@testing-library/jest-dom/extend-expect` and any global mocks (e.g., for `firebase/app`).
+        *   Status: Open
+    *   **`TEST-FE-001.3`**: **Write First Basic Component Test:**
+        *   Description: Write a simple test for a basic component (e.g., `NotFoundPage.tsx` or a simple UI element) to ensure the testing framework is correctly configured and operational.
+        *   Status: Open
+    *   **`TEST-FE-001.4`**: **Set up Mocking for API Calls:**
+        *   Description: Establish a strategy for mocking `apiClient.ts` or underlying `fetch/axios` calls to avoid actual network requests during tests. This could involve manual mocks in `__mocks__` directories or using `jest.spyOn`.
+        *   Status: Open
+    *   **`TEST-FE-001.5`**: **Set up Mocking for Firebase Services:**
+        *   Description: Create mocks for `firebaseService.ts` or the Firebase SDK (`firebase/auth`, `firebase/firestore` if used directly) to control Firebase interactions during tests, especially for `AuthContext`.
+        *   Status: Open
 **Category:** Testing
 **Type:** Enhancement, New Feature
 **Affected Files/Modules:** `frontend/src/`, new `frontend/src/tests/` directory.
@@ -351,6 +367,44 @@ Define the corresponding API endpoints and payload types (`frontend/src/types/ap
 **ID:** `TEST-FE-002`
 **Title:** Develop Frontend Test Plan and Coverage Goals
 **Description:** Similar to the backend, develop a test plan for the frontend. Identify key user flows and components that require testing. Define coverage goals and prioritize writing tests for critical functionalities.
+    *   **`TEST-FE-002.1`**: **Write Unit Tests for Core Components:**
+        *   Description: Develop unit tests for key components, verifying rendering, props handling, and user interactions.
+            *   `App.tsx` (basic rendering, initial routing)
+            *   `components/ChatInterface.tsx` (message sending, display, input handling)
+            *   `components/common/Layout.tsx` (presence of layout elements)
+            *   `components/common/ProtectedRoute.tsx` (route guarding based on auth status)
+            *   `pages/LoginPage.tsx` (form interactions, validation, submission logic)
+            *   `pages/ChatPage.tsx` (integration with `ChatInterface`, basic structure)
+            *   `pages/SettingsPage.tsx` (displaying settings, interaction with forms if any)
+        *   Status: Open
+    *   **`TEST-FE-002.2`**: **Write Unit Tests for Contexts and Hooks:**
+        *   Description: Test the logic within React Contexts and custom Hooks.
+            *   `contexts/AuthContext.tsx` (login, logout, token state, user profile updates; mock Firebase interactions)
+            *   `hooks/useAuth.ts` (ensure it correctly provides `AuthContext` values)
+        *   Status: Open
+    *   **`TEST-FE-002.3`**: **Write Unit Tests for Service Modules:**
+        *   Description: Test the functions within service modules, mocking their dependencies (like `apiClient` or Firebase SDK).
+            *   `services/apiClient.ts` (if not fully covered by E2E/integration, test interceptors or specific helper functions with mocked `axios/fetch`)
+            *   `services/chatApiService.ts` (sending messages, fetching history; mock `apiClient`)
+            *   `services/firebaseService.ts` (auth functions; mock Firebase SDK)
+            *   `services/historyApiService.ts` (mock `apiClient`)
+            *   `services/patientDataApiService.ts` (mock `apiClient`)
+            *   `services/userProfileApiService.ts` (mock `apiClient`)
+        *   Status: Open
+    *   **`TEST-FE-002.4`**: **Define Initial Test Coverage Target:**
+        *   Description: Set an initial, achievable test coverage target (e.g., 60-70% for lines/statements/branches) for the `frontend/src` directory. Configure Jest to generate coverage reports.
+        *   Status: Open
+    *   **`TEST-FE-002.5`**: **Integrate Test Execution into CI Pipeline (Placeholder):**
+        *   Description: Plan for adding a script to `package.json` (e.g., `"test": "jest"`) and eventually integrating this into the CI/CD pipeline to run tests automatically.
+        *   Status: Open
+    *   **`TEST-FE-002.6`**: **Document Testing Strategies and Best Practices (Placeholder):**
+        *   Description: Plan to create a small document or section in `DEVELOPMENT.md` outlining frontend testing approaches, how to write tests, mocking strategies, and when to use different types of tests (unit vs. integration).
+        *   Status: Open
+    *   **`TEST-FE-002.7`**: **Write Integration Tests for Key User Flows (Future Goal):**
+        *   Description: As a next step after establishing unit tests, plan for integration tests for critical user flows. These would involve multiple components and services. Examples:
+            *   Login flow: `LoginPage` -> `AuthContext` -> `apiClient` (mocked).
+            *   Sending a chat message: `ChatPage` -> `ChatInterface` -> `chatApiService` (mocked).
+        *   Status: Open
 **Category:** Testing
 **Type:** Enhancement
 **Affected Files/Modules:** `frontend/src/`.

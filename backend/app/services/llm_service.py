@@ -48,6 +48,9 @@ _init_vertex_ai_once()
 
 
 # --- Default Configurations ---
+# LLM Model Name - can be overridden by environment variable
+DEFAULT_LLM_MODEL_NAME = os.getenv("LLM_MODEL_NAME", "gemini-1.0-pro-001")
+
 DEFAULT_SAFETY_SETTINGS = {
     HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
     HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE,
@@ -56,9 +59,10 @@ DEFAULT_SAFETY_SETTINGS = {
 }
 
 DEFAULT_GENERATION_CONFIG = GenerationConfig(
-    temperature=0.7, # Controls randomness. Lower for more deterministic.
-    top_p=0.95,      # Nucleus sampling.
-    # max_output_tokens=2048, # Varies by model, can be set if needed
+    temperature=float(os.getenv("LLM_TEMPERATURE", 0.7)),
+    top_p=float(os.getenv("LLM_TOP_P", 0.95)),
+    # max_output_tokens can be set if the environment variable is present
+    **({"max_output_tokens": int(os.environ["LLM_MAX_OUTPUT_TOKENS"])} if "LLM_MAX_OUTPUT_TOKENS" in os.environ else {})
 )
 
 # --- Helper for Message Conversion ---
@@ -189,7 +193,7 @@ async def _generate_content_with_retry(
 async def get_llm_response(
     prompt: str,
     conversation_history: Optional[List[BaseMessage]] = None,
-    llm_model_name: str = "gemini-1.0-pro-001", # More specific Gemini 1.0 Pro version
+    llm_model_name: Optional[str] = None, # Will default to DEFAULT_LLM_MODEL_NAME if None
     generation_config_override: Optional[GenerationConfig] = None,
     safety_settings_override: Optional[Dict[HarmCategory, HarmBlockThreshold]] = None,
     tools_schema: Optional[List[Any]] = None # Placeholder for vertexai.generative_models.Tool objects
@@ -200,7 +204,7 @@ async def get_llm_response(
     Args:
         prompt: The current user prompt or query.
         conversation_history: A list of LangChain BaseMessage objects representing prior turns.
-        llm_model_name: The name/ID of the Vertex AI model to use (e.g., "gemini-1.5-flash-preview-0514", "gemini-1.0-pro-001").
+        llm_model_name: The name/ID of the Vertex AI model to use. If None, uses DEFAULT_LLM_MODEL_NAME.
         generation_config_override: Optional override for model generation parameters.
         safety_settings_override: Optional override for content safety settings.
         tools_schema: Optional list of tools (function declarations) for the model to consider.
@@ -213,8 +217,10 @@ async def get_llm_response(
         logger.error("Vertex AI not initialized. Cannot get LLM response.")
         return "Error: LLM service not available (Vertex AI not initialized)."
 
+    current_model_name = llm_model_name if llm_model_name else DEFAULT_LLM_MODEL_NAME
+
     try:
-        model = GenerativeModel(llm_model_name)
+        model = GenerativeModel(current_model_name)
 
         # Prepare content list for Vertex AI
         # The `prompt` is the latest user message in the conversation sequence
@@ -248,7 +254,7 @@ async def get_llm_response(
 
         # Process response - check for blocked content or errors first
         if not response.candidates:
-            logger.warning(f"LLM response for model {llm_model_name} had no candidates. Finish reason: {response.prompt_feedback.block_reason if response.prompt_feedback else 'Unknown'}")
+            logger.warning(f"LLM response for model {current_model_name} had no candidates. Finish reason: {response.prompt_feedback.block_reason if response.prompt_feedback else 'Unknown'}")
             # Consider specific handling for response.prompt_feedback.block_reason_message
             return "Error: LLM response was blocked or empty."
 
@@ -294,28 +300,28 @@ async def get_llm_response(
                 # This highlights a slight tension between "simple text response" and full LLM capability.
                 # For MVP and this service's current signature, it will primarily aim to return aggregated text.
                 # The next layer (LangGraph) will more intelligently parse `response.candidates[0]`.
-                logger.info(f"LLM for model {llm_model_name} returned function call(s) without accompanying text.")
+                logger.info(f"LLM for model {current_model_name} returned function call(s) without accompanying text.")
                 # To fully support LangGraph's tool usage, the response of this function might need to be more structured
                 # (e.g., returning the raw Candidate object or a Pydantic model).
                 # For MVP strict "text response":
                 return "" # Or a conventional string indicating a tool call happened, e.g., "[TOOL_CALL_INTENT]"
             else: # No text and no function call parts
-                logger.warning(f"LLM response candidate for model {llm_model_name} had parts but no parsable text or function calls.")
+                logger.warning(f"LLM response candidate for model {current_model_name} had parts but no parsable text or function calls.")
                 return ""
 
 
-        logger.warning(f"LLM response for model {llm_model_name} was empty or in an unexpected format.")
+        logger.warning(f"LLM response for model {current_model_name} was empty or in an unexpected format.")
         return ""
 
     except google_exceptions.RetryError as e: # Tenacity's RetryError
-        logger.error(f"LLM call failed after multiple retries for model {llm_model_name}: {e.last_attempt.exception()}", exc_info=True)
+        logger.error(f"LLM call failed after multiple retries for model {current_model_name}: {e.last_attempt.exception()}", exc_info=True)
         return f"Error: LLM call failed after retries ({e.last_attempt.exception()})."
     except google_exceptions.InvalidArgument as e: # Often bad model name or malformed request
-        logger.error(f"LLM call failed due to InvalidArgument for model {llm_model_name}: {e}", exc_info=True)
+        logger.error(f"LLM call failed due to InvalidArgument for model {current_model_name}: {e}", exc_info=True)
         return f"Error: LLM request was invalid ({e}). Check model name and parameters."
     except google_exceptions.PermissionDenied as e: # ADC or SA permissions issue
-        logger.error(f"LLM call failed due to PermissionDenied for model {llm_model_name}: {e}", exc_info=True)
+        logger.error(f"LLM call failed due to PermissionDenied for model {current_model_name}: {e}", exc_info=True)
         return f"Error: Permission denied for LLM service. Check service account permissions for Vertex AI."
     except Exception as e: # Catch-all for other unexpected errors
-        logger.error(f"Unexpected error in get_llm_response for model {llm_model_name}: {e}", exc_info=True)
+        logger.error(f"Unexpected error in get_llm_response for model {current_model_name}: {e}", exc_info=True)
         return f"Error: An unexpected error occurred with the LLM service ({type(e).__name__})."
