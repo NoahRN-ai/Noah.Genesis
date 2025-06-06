@@ -71,7 +71,11 @@ Project Noah MVP V1.0 adopts a **radically simplified approach to LTM** to ensur
 
 This focused LTM strategy aligns with the "BUILD\_WORKING\_MVP\_FAST" mandate and defers complexity, ensuring the MVP delivers core value effectively.
 
-## RAG-Powered Information Retrieval
+## Agent Capabilities
+
+This section outlines the core capabilities of the Noah.AI agent as implemented in `backend/app/agent/graph.py`.
+
+### RAG-Powered Information Retrieval
 
 The agent incorporates a Retrieval Augmented Generation (RAG) capability to answer user queries by accessing a curated knowledge base. This feature is crucial for providing factual and contextually relevant information, especially for clinical questions.
 
@@ -94,6 +98,38 @@ The RAG functionality is orchestrated within the LangGraph agent defined in `bac
     *   The LLM then generates a final, comprehensive response for the user.
 
 The entire RAG process is designed to align with the `Logos Accord`, emphasizing truthfulness, accuracy, and clear communication. Detailed prompt structures and their design rationale are documented in `backend/app/agent/prompts.md`. This approach allows Noah.AI to provide informative answers based on curated sources, enhancing its utility and trustworthiness for nursing professionals.
+
+### Note Drafting (MVP)
+
+The agent can assist nurses by drafting simple nursing notes (e.g., progress notes, SOAP-style notes) based on the current conversational context. This feature is implemented in the `note_drafting_node` within the LangGraph workflow.
+
+**MVP Constraints & Data Sourcing:**
+*   For MVP V1.0, note drafting relies *exclusively* on information explicitly stated or entered during the current user session (i.e., from the `conversation_history`).
+*   An optional `patient_data_log_summary_for_drafting` field can be populated in the `AgentState` if other parts of the graph explicitly fetch and summarize `PatientDataLog` entries, but the core drafting logic defaults to using only session history.
+*   The agent **does not** invent information, infer beyond provided data, or access external EHRs.
+
+**Prompting Strategy:**
+*   A dedicated system prompt, `system_message_note_drafting` (detailed in `prompts.md`), guides the LLM.
+*   This prompt includes an `Output_Template_MVP` (e.g., a simplified SOAP structure) to ensure the note is structured and contains only relevant information from the session.
+*   The drafting process adheres to `Logos Accord` principles, emphasizing accuracy, clarity, and presenting the output as a "DRAFT for review."
+
+The integration into LangGraph allows the `llm_reasoner_node` to detect a user's request for a note and route the conversation to the `note_drafting_node` for processing.
+
+### Handoff Report Generation (MVP)
+
+Similar to note drafting, the agent can generate concise handoff reports. This is handled by the `handoff_report_node` in the LangGraph agent.
+
+**MVP Constraints & Data Sourcing:**
+*   Handoff reports are generated *exclusively* from information within the current `conversation_history`.
+*   The optional `patient_data_log_summary_for_drafting` can be used if populated by other graph components.
+*   The agent adheres to strict MVP V1.0 limitations: no external data, no inference beyond session content.
+
+**Prompting Strategy:**
+*   The `system_message_handoff_report` prompt (see `prompts.md`) instructs the LLM.
+*   It includes an `Output_Template_MVP` tailored for handoff reports, focusing on brevity and critical information for continuity of care (e.g., Key Events, Pending Tasks, Critical Alerts from the session).
+*   `Logos Accord` principles ensure the report is clear, accurate (based on session data), and presented as a "DRAFT for review."
+
+User requests for handoff reports are identified by the `llm_reasoner_node`, which then routes to the `handoff_report_node` for generation.
 
 ## 3. HIPAA and Data Privacy for Conversational Memory (STM)
 
