@@ -139,6 +139,12 @@ resource "google_project_iam_member" "sa_cloudrun_webapp_monitoring_writer" {
   member  = "serviceAccount:${google_service_account.sa_cloudrun_webapp.email}"
 }
 
+resource "google_project_iam_member" "sa_cloudrun_webapp_vertex_user" {
+  project = google_project.noah_mvp_project.project_id
+  role    = "roles/aiplatform.user" # To invoke Vertex AI LLMs, Embeddings, Vector Search
+  member  = "serviceAccount:${google_service_account.sa_cloudrun_webapp.email}"
+}
+
 # Permissions for sa-rag-pipeline
 resource "google_project_iam_member" "sa_rag_pipeline_storage_object_viewer" {
   project = google_project.noah_mvp_project.project_id
