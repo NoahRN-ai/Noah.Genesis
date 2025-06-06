@@ -7,11 +7,6 @@ from backend.app.core.security import UserInfo, get_current_active_user
 from backend.app.agent.memory import save_interaction, load_session_history
 from backend.app.services.llm_service import get_llm_response
 from backend.app.models.firestore_models import InteractionActor
-# ToolCall and ToolResponse from firestore_models are named PydanticToolCall and PydanticToolResponse in the prompt output for chat.py
-# but firestore_models.py itself defines them as ToolCall and ToolResponse.
-# For consistency with firestore_models.py actual definitions, I'll use ToolCall and ToolResponse here.
-# If they were meant to be aliased, that should happen in firestore_models or api_models.
-# from backend.app.models.firestore_models import ToolCall as PydanticToolCall, ToolResponse as PydanticToolResponse
 from backend.app.core.config import settings
 
 router = APIRouter()
@@ -24,13 +19,8 @@ async def handle_chat_message(
 ):
     """
     Handles incoming user chat messages, orchestrates interaction with the LLM
-    (and eventually tools via LangGraph), and returns the AI agent's response.
-
-    For Task 1.5 (MVP prior to full LangGraph integration in Phase 3):
-    - It loads recent history.
-    - Makes a direct call to the llm_service.
-    - Saves the user message and AI response to history.
-    - Full tool use and complex LangGraph orchestration will be added in Phase 3.
+    and returns the AI agent's response.
+    LLM service errors are now handled by global exception handlers.
     """
     session_id = request.session_id or str(uuid.uuid4())
     user_id = current_user.user_id
@@ -42,58 +32,64 @@ async def handle_chat_message(
             user_id=user_id,
             actor=InteractionActor.USER,
             message_content=request.user_query_text
-            # tool_calls and tool_responses are None for user messages
         )
     except Exception as e:
         logger.error(f"Error saving user message to history for session {session_id}: {e}", exc_info=True)
-        # Continue processing, but log the error. History saving is important but shouldn't block response.
+        # Continue processing, but log the error.
 
     # 2. Load recent conversation history for context
     try:
-        conversation_history_lc_messages = await load_session_history(session_id=session_id, limit=10) # Limit context window
+        conversation_history_lc_messages = await load_session_history(session_id=session_id, limit=10)
     except Exception as e:
         logger.error(f"Error loading session history for session {session_id}: {e}", exc_info=True)
         conversation_history_lc_messages = [] # Proceed with no history if loading fails
 
-    # 3. Get LLM response (Simplified for Task 1.5 - direct call)
-    #    Phase 3 will replace this with LangGraph invocation.
-    #    For now, no complex tool schema passed, LLM responds based on text.
+    # 3. Get LLM response
+    # Service `get_llm_response` now raises custom exceptions (LLMError, etc.) on failure.
+    # These will be caught by global handlers in main.py.
     try:
         ai_text_response = await get_llm_response(
             prompt=request.user_query_text,
             conversation_history=conversation_history_lc_messages,
             llm_model_name=settings.DEFAULT_LLM_MODEL_NAME
-            # tools_schema can be added here later when LangGraph orchestrates tool definitions
         )
-        if ai_text_response.startswith("Error:"): # Handle errors from llm_service
-            logger.error(f"LLM service error for session {session_id}: {ai_text_response}")
-            # Fallback response or re-raise as appropriate HTTPException
-            # For MVP, we can return this error message to the user for now to indicate issue
-            pass # Let it be saved as is, and returned.
+    except HTTPException: # Re-raise if get_llm_response or other code raises FastAPI's HTTPException directly
+        raise
+    except Exception as e: # Catch any other unexpected error from LLM call or this block
+        logger.error(f"Critical error during LLM interaction for session {session_id}: {e}", exc_info=True)
+        # This will be caught by the generic Exception handler in main.py if it's not an AppException
+        # or by the AppException handler if it's a custom one (like LLMError).
+        # If we want to ensure a 503 specifically for *any* error in this LLM path not already handled:
+        # raise HTTPException(
+        #     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        #     detail="The AI agent is currently unavailable. Please try again later."
+        # )
+        # For now, let the global handlers manage the response based on the raised exception type.
+        # If 'e' is already an AppException (like LLMError), it will be handled correctly.
+        # If 'e' is a non-AppException, the generic handler in main.py will give a 500.
+        # To force a 503 for *any* error here not already an HTTPException:
+        if not isinstance(e, (HTTPException)): # Avoid re-wrapping HTTPExceptions
+             raise HTTPException(
+                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                 detail=f"The AI agent encountered an issue: {type(e).__name__}. Please try again later."
+             ) from e
+        raise # Re-raise if it was already an HTTPException or an AppException
 
-    except Exception as e:
-        logger.error(f"Critical error calling LLM service for session {session_id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="The AI agent is currently unavailable. Please try again later."
-        )
 
     # 4. Save AI's response to interaction history
     try:
-        # In this simplified flow, tool_calls and tool_responses are not generated by this direct LLM call.
-        # These would be populated when LangGraph (with tool-using agents) is integrated.
         agent_interaction = await save_interaction(
             session_id=session_id,
-            user_id=user_id, # The agent response is tied to the user's session
+            user_id=user_id,
             actor=InteractionActor.AGENT,
             message_content=ai_text_response,
-            tool_calls=None, # Placeholder for Phase 3
-            tool_responses=None # Placeholder for Phase 3
+            tool_calls=None,
+            tool_responses=None
         )
         interaction_id = agent_interaction.interaction_id
     except Exception as e:
         logger.error(f"Error saving agent message to history for session {session_id}: {e}", exc_info=True)
-        interaction_id = "error_saving_agent_response" # Fallback ID
+        interaction_id = "error_saving_agent_response"
 
     return ChatResponse(
         agent_response_text=ai_text_response,

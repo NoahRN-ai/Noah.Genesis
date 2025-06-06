@@ -115,3 +115,7 @@ class UserProfileResponse(BaseModel): # Based on FirestoreUserProfile structure
     model_config = {
         "from_attributes": True
     }
+
+class ErrorDetail(BaseModel):
+    detail: str
+    error_code: Optional[str] = None
