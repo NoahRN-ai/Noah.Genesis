@@ -24,7 +24,7 @@ It is built with a focus on modularity, scalability (via Cloud Run), and securit
 *   **LLM Interaction:** Google Vertex AI (via `llm_service.py`).
 *   **RAG System (Vector Store):** Google Vertex AI Vector Search.
 *   **RAG System (Embedding Generation):** Google Vertex AI Embedding API (`textembedding-gecko@003`).
-*   **Agent Orchestration (Future):** LangGraph (to be fully integrated in Phase 3).
+*   **Agent Orchestration:* LangGraph (partially integrated, with core RAG logic in `app/agent/graph.py`).
 *   **Deployment:** Docker & Google Cloud Run (managed via Google Cloud Build).
 *   **Linting/Formatting:** Ruff (Black-compatible styling).
 *   **Testing:** Pytest.
@@ -48,7 +48,7 @@ It is built with a focus on modularity, scalability (via Cloud Run), and securit
         *   `rag_service.py`: Service for RAG system (querying Vector Search, retrieving chunk details).
     *   **`agent/`**: Logic related to the AI agent's behavior and memory.
         *   `memory.py`: Short-term memory management (saving/loading conversation history from Firestore).
-        *   *(Future: `graph.py` for LangGraph state machine, `tools.py` for agent tools - Phase 3)*
+        *   `graph.py`: Implements the LangGraph state machine for agent decision-making and RAG orchestration (e.g., `llm_reasoner_node`, `rag_synthesis_node`).
 *   **`tests/`**: Pytest unit and integration tests (to be developed).
 *   **`Dockerfile`**: Defines the Docker container image for the backend application.
 *   **`cloudbuild.yaml`**: Google Cloud Build configuration for CI/CD pipeline (build, push to Artifact Registry, deploy to Cloud Run).
