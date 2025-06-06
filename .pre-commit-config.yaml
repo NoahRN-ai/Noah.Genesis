@@ -17,3 +17,21 @@ repos:
     -   id: ruff
         args: [--fix, --exit-non-zero-on-fix]
     -   id: ruff-format
+
+# Terraform hooks (added by script)
+-   repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0 # Use a recent version
+    hooks:
+    -   id: check-yaml
+    -   id: end-of-file-fixer
+    -   id: trailing-whitespace
+-   repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: v1.88.2 # Use a recent version of terraform-docs/pre-commit hooks
+    hooks:
+    -   id: terraform_fmt
+        args:
+        - --args=-recursive
+    -   id: terraform_tflint
+        args:
+        - --args=--recursive
+        # - --args=--tflint-init # Optional: To automatically init tflint if needed

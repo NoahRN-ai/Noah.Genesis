@@ -1,17 +1,29 @@
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock, patch  # AsyncMock for async methods
+
 import pytest
-from unittest.mock import patch, MagicMock, AsyncMock # AsyncMock for async methods
-from datetime import datetime, timezone
+
+from backend.app.models.firestore_models import (
+    AIContextualStore,
+    AIContextualStoreCreate,
+    AIContextualStoreUpdate,
+    CodeableConcept,
+    FHIRStatusMedicationStatement,
+    FHIRStatusObservation,
+    Gender,
+    HumanName,
+    MedicationStatementCreate,
+    Observation,
+    ObservationCreate,
+    PatientProfile,
+    PatientProfileCreate,
+    Quantity,
+    utcnow,  # Assuming this is available from firestore_models or firestore_service
+)
 
 # Make sure the service module can be imported. Adjust path if necessary.
 # This assumes tests are run from a context where 'backend' is a top-level package.
 from backend.app.services import firestore_service
-from backend.app.models.firestore_models import (
-    PatientProfile, PatientProfileCreate, PatientProfileUpdate, Gender, HumanName,
-    Observation, ObservationCreate, ObservationUpdate, FHIRStatusObservation, CodeableConcept, Quantity,
-    MedicationStatement, MedicationStatementCreate, MedicationStatementUpdate, FHIRStatusMedicationStatement,
-    AIContextualStore, AIContextualStoreCreate, AIContextualStoreUpdate,
-    utcnow # Assuming this is available from firestore_models or firestore_service
-)
 
 # If utcnow is in firestore_service, use that, otherwise import from models.
 # For consistency, let's assume firestore_service.utcnow is used by the service.
@@ -19,38 +31,55 @@ from backend.app.models.firestore_models import (
 
 # --- Test Data Samples (Simplified for brevity, reuse from model tests or define new) ---
 
+
 def create_sample_patient_profile_create_data() -> PatientProfileCreate:
     return PatientProfileCreate(
         name=[HumanName(family="Test", given=["Patient"], use="official")],
         gender=Gender.FEMALE,
-        birthDate=datetime(1990, 5, 15, tzinfo=timezone.utc)
+        birthDate=datetime(1990, 5, 15, tzinfo=UTC),
     )
+
 
 def create_sample_patient_profile_db_data(patient_id: str) -> dict:
     now = utcnow()
     return {
         "patient_id": patient_id,
-        "name": [{"family": "Test", "given": ["Patient"], "use": "official", "text":"Patient Test"}], # Pydantic might auto-add text
+        "name": [
+            {
+                "family": "Test",
+                "given": ["Patient"],
+                "use": "official",
+                "text": "Patient Test",
+            }
+        ],  # Pydantic might auto-add text
         "gender": "female",
-        "birthDate": datetime(1990, 5, 15, tzinfo=timezone.utc),
+        "birthDate": datetime(1990, 5, 15, tzinfo=UTC),
         "active": True,
-        "telecom": [], "address": [], # Assuming defaults
+        "telecom": [],
+        "address": [],  # Assuming defaults
         "created_at": now,
-        "updated_at": now
+        "updated_at": now,
     }
+
 
 def create_sample_observation_create_data(patient_id: str) -> ObservationCreate:
     return ObservationCreate(
         subject_patient_id=patient_id,
         status=FHIRStatusObservation.FINAL,
-        code=CodeableConcept(text="Heart Rate", coding=[{"system": "loinc", "code": "8867-4", "display": "Heart rate"}]),
+        code=CodeableConcept(
+            text="Heart Rate",
+            coding=[{"system": "loinc", "code": "8867-4", "display": "Heart rate"}],
+        ),
         effectiveDateTime=utcnow(),
-        valueQuantity=Quantity(value=75, unit="bpm")
+        valueQuantity=Quantity(value=75, unit="bpm"),
     )
+
 
 def create_sample_observation_db_data(obs_id: str, patient_id: str) -> dict:
     now = utcnow()
-    data = create_sample_observation_create_data(patient_id).model_dump(mode='json') # use_enum_values=True if in model_config
+    data = create_sample_observation_create_data(patient_id).model_dump(
+        mode="json"
+    )  # use_enum_values=True if in model_config
     # Manually convert enums if not handled by model_dump with use_enum_values=True
     data["status"] = FHIRStatusObservation.FINAL.value
     data["observation_id"] = obs_id
@@ -59,29 +88,35 @@ def create_sample_observation_db_data(obs_id: str, patient_id: str) -> dict:
     # Pydantic sub-models are already dicts via model_dump
     return data
 
-def create_sample_med_statement_create_data(patient_id: str) -> MedicationStatementCreate:
+
+def create_sample_med_statement_create_data(
+    patient_id: str,
+) -> MedicationStatementCreate:
     return MedicationStatementCreate(
         subject_patient_id=patient_id,
         status=FHIRStatusMedicationStatement.ACTIVE,
         medicationCodeableConcept=CodeableConcept(text="Amoxicillin 250mg"),
-        effectiveDateTime=utcnow()
+        effectiveDateTime=utcnow(),
     )
+
 
 def create_sample_med_statement_db_data(stmt_id: str, patient_id: str) -> dict:
     now = utcnow()
-    data = create_sample_med_statement_create_data(patient_id).model_dump(mode='json')
+    data = create_sample_med_statement_create_data(patient_id).model_dump(mode="json")
     data["status"] = FHIRStatusMedicationStatement.ACTIVE.value
     data["medication_statement_id"] = stmt_id
     data["created_at"] = now
     data["updated_at"] = now
     return data
 
+
 def create_sample_ai_store_create_data(patient_id: str) -> AIContextualStoreCreate:
     return AIContextualStoreCreate(
         patient_id=patient_id,
         last_summary="Initial summary.",
-        key_insights=["Insight 1"]
+        key_insights=["Insight 1"],
     )
+
 
 def create_sample_ai_store_db_data(patient_id: str) -> dict:
     now = utcnow()
@@ -89,39 +124,55 @@ def create_sample_ai_store_db_data(patient_id: str) -> dict:
         "patient_id": patient_id,
         "last_summary": "Initial summary.",
         "key_insights": ["Insight 1"],
-        "interaction_highlights": [], "preferences": {}, "custom_alerts": [], # Defaults
+        "interaction_highlights": [],
+        "preferences": {},
+        "custom_alerts": [],  # Defaults
         "created_at": now,
-        "updated_at": now
+        "updated_at": now,
     }
 
+
 # --- Pytest Fixture for Mocking Firestore Client ---
+
 
 @pytest.fixture
 def mock_firestore_db():
     # This patches 'db' instance in the firestore_service module
-    with patch('backend.app.services.firestore_service.db', new_callable=AsyncMock) as mock_db:
+    with patch(
+        "backend.app.services.firestore_service.db", new_callable=AsyncMock
+    ) as mock_db:
         yield mock_db
+
 
 @pytest.fixture
 def mock_utcnow():
-    fixed_now = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
-    with patch('backend.app.services.firestore_service.utcnow', return_value=fixed_now) as mock_time:
+    fixed_now = datetime(2023, 1, 1, 12, 0, 0, tzinfo=UTC)
+    with patch(
+        "backend.app.services.firestore_service.utcnow", return_value=fixed_now
+    ) as mock_time:
         yield mock_time
 
 
 # --- PatientProfile Service Tests ---
 
+
 @pytest.mark.asyncio
-async def test_create_patient_profile(mock_firestore_db: AsyncMock, mock_utcnow: MagicMock):
+async def test_create_patient_profile(
+    mock_firestore_db: AsyncMock, mock_utcnow: MagicMock
+):
     patient_id = "patient_test_001"
     profile_create_data = create_sample_patient_profile_create_data()
 
     mock_doc_ref = AsyncMock()
     mock_firestore_db.collection().document.return_value = mock_doc_ref
 
-    result = await firestore_service.create_patient_profile(patient_id, profile_create_data)
+    result = await firestore_service.create_patient_profile(
+        patient_id, profile_create_data
+    )
 
-    mock_firestore_db.collection.assert_called_with(firestore_service.NOAH_MVP_PATIENTS_COLLECTION)
+    mock_firestore_db.collection.assert_called_with(
+        firestore_service.NOAH_MVP_PATIENTS_COLLECTION
+    )
     mock_firestore_db.collection().document.assert_called_with(patient_id)
 
     # Check the data passed to set()
@@ -135,6 +186,7 @@ async def test_create_patient_profile(mock_firestore_db: AsyncMock, mock_utcnow:
     assert isinstance(result, PatientProfile)
     assert result.patient_id == patient_id
     assert result.gender == profile_create_data.gender
+
 
 @pytest.mark.asyncio
 async def test_get_patient_profile_found(mock_firestore_db: AsyncMock):
@@ -156,6 +208,7 @@ async def test_get_patient_profile_found(mock_firestore_db: AsyncMock):
     assert result.patient_id == patient_id
     assert result.created_at == db_data["created_at"]
 
+
 @pytest.mark.asyncio
 async def test_get_patient_profile_not_found(mock_firestore_db: AsyncMock):
     patient_id = "patient_test_003"
@@ -168,7 +221,9 @@ async def test_get_patient_profile_not_found(mock_firestore_db: AsyncMock):
     result = await firestore_service.get_patient_profile(patient_id)
     assert result is None
 
+
 # --- Observation Service Tests ---
+
 
 @pytest.mark.asyncio
 async def test_create_observation(mock_firestore_db: AsyncMock, mock_utcnow: MagicMock):
@@ -179,7 +234,10 @@ async def test_create_observation(mock_firestore_db: AsyncMock, mock_utcnow: Mag
     mock_doc_ref = AsyncMock()
     mock_doc_ref.id = observation_id
     mock_subcollection_ref = AsyncMock()
-    mock_subcollection_ref.add.return_value = (mock_utcnow.return_value, mock_doc_ref) # add returns (timestamp, DocumentReference)
+    mock_subcollection_ref.add.return_value = (
+        mock_utcnow.return_value,
+        mock_doc_ref,
+    )  # add returns (timestamp, DocumentReference)
 
     mock_patient_doc_ref = AsyncMock()
     mock_patient_doc_ref.collection.return_value = mock_subcollection_ref
@@ -187,9 +245,13 @@ async def test_create_observation(mock_firestore_db: AsyncMock, mock_utcnow: Mag
 
     result = await firestore_service.create_observation(patient_id, obs_create_data)
 
-    mock_firestore_db.collection.assert_called_with(firestore_service.NOAH_MVP_PATIENTS_COLLECTION)
+    mock_firestore_db.collection.assert_called_with(
+        firestore_service.NOAH_MVP_PATIENTS_COLLECTION
+    )
     mock_firestore_db.collection().document.assert_called_with(patient_id)
-    mock_patient_doc_ref.collection.assert_called_with(firestore_service.NOAH_MVP_OBSERVATIONS_SUBCOLLECTION)
+    mock_patient_doc_ref.collection.assert_called_with(
+        firestore_service.NOAH_MVP_OBSERVATIONS_SUBCOLLECTION
+    )
 
     args, _ = mock_subcollection_ref.add.call_args
     add_data = args[0]
@@ -200,6 +262,7 @@ async def test_create_observation(mock_firestore_db: AsyncMock, mock_utcnow: Mag
     assert isinstance(result, Observation)
     assert result.observation_id == observation_id
     assert result.subject_patient_id == patient_id
+
 
 @pytest.mark.asyncio
 async def test_list_observations_for_patient(mock_firestore_db: AsyncMock):
@@ -218,24 +281,30 @@ async def test_list_observations_for_patient(mock_firestore_db: AsyncMock):
     mock_snapshot2.to_dict.return_value = obs_data2
 
     mock_query = AsyncMock()
+
     # Mock the async iterator part of query.stream()
     async def mock_stream_results():
         yield mock_snapshot1
         yield mock_snapshot2
-    mock_query.stream.return_value = mock_stream_results() # assign the async generator
+
+    mock_query.stream.return_value = mock_stream_results()  # assign the async generator
 
     mock_subcollection_ref = AsyncMock()
-    mock_subcollection_ref.order_by().limit.return_value = mock_query # Chain calls
+    mock_subcollection_ref.order_by().limit.return_value = mock_query  # Chain calls
     mock_patient_doc_ref = AsyncMock()
     mock_patient_doc_ref.collection.return_value = mock_subcollection_ref
     mock_firestore_db.collection().document.return_value = mock_patient_doc_ref
 
-    results = await firestore_service.list_observations_for_patient(patient_id, limit=10)
+    results = await firestore_service.list_observations_for_patient(
+        patient_id, limit=10
+    )
 
     assert len(results) == 2
     assert isinstance(results[0], Observation)
     assert results[0].observation_id == "obs1"
-    mock_subcollection_ref.order_by.assert_called_with("effectiveDateTime", direction=firestore_service.Query.DESCENDING) # Assuming Query is accessible
+    mock_subcollection_ref.order_by.assert_called_with(
+        "effectiveDateTime", direction=firestore_service.Query.DESCENDING
+    )  # Assuming Query is accessible
     mock_subcollection_ref.order_by().limit.assert_called_with(10)
 
 
@@ -245,43 +314,57 @@ async def test_list_observations_for_patient(mock_firestore_db: AsyncMock):
 
 # --- AIContextualStore Service Tests ---
 
+
 @pytest.mark.asyncio
-async def test_create_or_replace_ai_contextual_store_new(mock_firestore_db: AsyncMock, mock_utcnow: MagicMock):
+async def test_create_or_replace_ai_contextual_store_new(
+    mock_firestore_db: AsyncMock, mock_utcnow: MagicMock
+):
     patient_id = "patient_ai_001"
     store_create_data = create_sample_ai_store_create_data(patient_id)
 
     mock_existing_snapshot = AsyncMock()
-    mock_existing_snapshot.exists = False # Simulate document does not exist
+    mock_existing_snapshot.exists = False  # Simulate document does not exist
 
     mock_doc_ref = AsyncMock()
-    mock_doc_ref.get.return_value = mock_existing_snapshot # For the initial check
+    mock_doc_ref.get.return_value = mock_existing_snapshot  # For the initial check
     mock_firestore_db.collection().document.return_value = mock_doc_ref
 
-    result = await firestore_service.create_or_replace_ai_contextual_store(patient_id, store_create_data)
+    result = await firestore_service.create_or_replace_ai_contextual_store(
+        patient_id, store_create_data
+    )
 
-    mock_firestore_db.collection.assert_called_with(firestore_service.AI_CONTEXTUAL_STORES_COLLECTION)
+    mock_firestore_db.collection.assert_called_with(
+        firestore_service.AI_CONTEXTUAL_STORES_COLLECTION
+    )
     mock_firestore_db.collection().document.assert_called_with(patient_id)
 
     args, _ = mock_doc_ref.set.call_args
     set_data = args[0]
     assert set_data["patient_id"] == patient_id
     assert set_data["last_summary"] == store_create_data.last_summary
-    assert set_data["created_at"] == mock_utcnow.return_value # New document gets current time as created_at
+    assert (
+        set_data["created_at"] == mock_utcnow.return_value
+    )  # New document gets current time as created_at
     assert set_data["updated_at"] == mock_utcnow.return_value
 
     assert isinstance(result, AIContextualStore)
     assert result.patient_id == patient_id
     assert result.created_at == mock_utcnow.return_value
 
+
 @pytest.mark.asyncio
-async def test_create_or_replace_ai_contextual_store_existing(mock_firestore_db: AsyncMock, mock_utcnow: MagicMock):
+async def test_create_or_replace_ai_contextual_store_existing(
+    mock_firestore_db: AsyncMock, mock_utcnow: MagicMock
+):
     patient_id = "patient_ai_002"
     store_create_data = create_sample_ai_store_create_data(patient_id)
 
-    original_created_at = datetime(2022, 1, 1, 10, 0, 0, tzinfo=timezone.utc)
+    original_created_at = datetime(2022, 1, 1, 10, 0, 0, tzinfo=UTC)
     mock_existing_db_data = {
-        "patient_id": patient_id, "created_at": original_created_at, "updated_at": original_created_at,
-        "last_summary": "Old summary"
+        "patient_id": patient_id,
+        "created_at": original_created_at,
+        "updated_at": original_created_at,
+        "last_summary": "Old summary",
     }
 
     mock_existing_snapshot = AsyncMock()
@@ -292,18 +375,27 @@ async def test_create_or_replace_ai_contextual_store_existing(mock_firestore_db:
     mock_doc_ref.get.return_value = mock_existing_snapshot
     mock_firestore_db.collection().document.return_value = mock_doc_ref
 
-    result = await firestore_service.create_or_replace_ai_contextual_store(patient_id, store_create_data)
+    result = await firestore_service.create_or_replace_ai_contextual_store(
+        patient_id, store_create_data
+    )
 
     args, _ = mock_doc_ref.set.call_args
     set_data = args[0]
-    assert set_data["created_at"] == original_created_at # Should preserve original created_at
-    assert set_data["updated_at"] == mock_utcnow.return_value # updated_at should be new
-    assert set_data["last_summary"] == store_create_data.last_summary # Content updated
+    assert (
+        set_data["created_at"] == original_created_at
+    )  # Should preserve original created_at
+    assert (
+        set_data["updated_at"] == mock_utcnow.return_value
+    )  # updated_at should be new
+    assert set_data["last_summary"] == store_create_data.last_summary  # Content updated
 
     assert result.created_at == original_created_at
 
+
 @pytest.mark.asyncio
-async def test_update_ai_contextual_store(mock_firestore_db: AsyncMock, mock_utcnow: MagicMock):
+async def test_update_ai_contextual_store(
+    mock_firestore_db: AsyncMock, mock_utcnow: MagicMock
+):
     patient_id = "patient_ai_003"
     store_update_data = AIContextualStoreUpdate(last_summary="Updated summary")
 
@@ -325,7 +417,9 @@ async def test_update_ai_contextual_store(mock_firestore_db: AsyncMock, mock_utc
     mock_doc_ref.get.side_effect = [mock_check_snapshot, mock_updated_snapshot]
     mock_firestore_db.collection().document.return_value = mock_doc_ref
 
-    result = await firestore_service.update_ai_contextual_store(patient_id, store_update_data)
+    result = await firestore_service.update_ai_contextual_store(
+        patient_id, store_update_data
+    )
 
     mock_doc_ref.update.assert_called_once()
     args, _ = mock_doc_ref.update.call_args
@@ -336,6 +430,7 @@ async def test_update_ai_contextual_store(mock_firestore_db: AsyncMock, mock_utc
     assert isinstance(result, AIContextualStore)
     assert result.last_summary == "Updated summary"
     assert result.updated_at == mock_utcnow.return_value
+
 
 # --- General Notes for Service Tests ---
 # - Test delete_* functions: ensure doc_ref.delete() is called.
@@ -356,4 +451,4 @@ async def test_update_ai_contextual_store(mock_firestore_db: AsyncMock, mock_utc
 #   The mock needs to reflect this: `mock_subcollection_ref.add.return_value = (mock_timestamp, mock_doc_ref)`
 #   The `mock_timestamp` can be `mock_utcnow.return_value`.
 
-pytest # Ensure this file is treated as a test file
+pytest  # Ensure this file is treated as a test file

@@ -4,9 +4,9 @@
 resource "google_compute_network" "noah_mvp_vpc" {
   project                 = google_project.noah_mvp_project.project_id
   name                    = "vpc-noah-mvp"
-  auto_create_subnetworks = false                             # Custom mode VPC
-  mtu                     = 1460                              # Standard MTU
-  routing_mode            = "REGIONAL"                        # For Cloud NAT, regional routing is common. Can be GLOBAL if needed.
+  auto_create_subnetworks = false      # Custom mode VPC
+  mtu                     = 1460       # Standard MTU
+  routing_mode            = "REGIONAL" # For Cloud NAT, regional routing is common. Can be GLOBAL if needed.
 }
 
 # ------------------------------------------------------------------------------
@@ -18,7 +18,7 @@ resource "google_compute_subnetwork" "noah_mvp_subnet_primary" {
   ip_cidr_range            = "10.10.10.0/24" # Example range, ensure it doesn't overlap with other networks
   region                   = var.gcp_region
   network                  = google_compute_network.noah_mvp_vpc.id
-  private_ip_google_access = true           # Enable Private Google Access for this subnet
+  private_ip_google_access = true # Enable Private Google Access for this subnet
 
   log_config { # Optional: Enable VPC Flow Logs for the subnet for audit/troubleshooting
     aggregation_interval = "INTERVAL_10_MIN"
@@ -76,9 +76,9 @@ resource "google_compute_router_nat" "noah_mvp_nat_gateway" {
 # ------------------------------------------------------------------------------
 
 resource "google_compute_firewall" "fw_allow_internal_traffic_primary_subnet" {
-  project = google_project.noah_mvp_project.project_id
-  name    = "fw-noah-allow-internal-primary"
-  network = google_compute_network.noah_mvp_vpc.id
+  project   = google_project.noah_mvp_project.project_id
+  name      = "fw-noah-allow-internal-primary"
+  network   = google_compute_network.noah_mvp_vpc.id
   direction = "INGRESS"
   priority  = 1000 # Default priority
 

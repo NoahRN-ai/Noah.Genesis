@@ -99,10 +99,10 @@ resource "google_secret_manager_secret_iam_member" "sa_cloudrun_agent_access_rag
 }
 
 resource "google_secret_manager_secret_iam_member" "sa_cloudrun_agent_access_rag_db_password" {
-  project   = google_secret_manager_secret.noah_rag_db_password.project
-  secret_id = google_secret_manager_secret.noah_rag_db_password.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.sa_cloudrun_agent.email}"
+  project    = google_secret_manager_secret.noah_rag_db_password.project
+  secret_id  = google_secret_manager_secret.noah_rag_db_password.secret_id
+  role       = "roles/secretmanager.secretAccessor"
+  member     = "serviceAccount:${google_service_account.sa_cloudrun_agent.email}"
   depends_on = [google_secret_manager_secret_version.noah_rag_db_password_initial_version] # Ensure secret version exists before IAM
 }
 
@@ -132,9 +132,9 @@ resource "google_secret_manager_secret_iam_member" "sa_rag_pipeline_access_rag_d
 }
 
 resource "google_secret_manager_secret_iam_member" "sa_rag_pipeline_access_rag_db_password" {
-  project   = google_secret_manager_secret.noah_rag_db_password.project
-  secret_id = google_secret_manager_secret.noah_rag_db_password.secret_id
-  role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${google_service_account.sa_rag_pipeline.email}"
+  project    = google_secret_manager_secret.noah_rag_db_password.project
+  secret_id  = google_secret_manager_secret.noah_rag_db_password.secret_id
+  role       = "roles/secretmanager.secretAccessor"
+  member     = "serviceAccount:${google_service_account.sa_rag_pipeline.email}"
   depends_on = [google_secret_manager_secret_version.noah_rag_db_password_initial_version] # Ensure secret version exists
 }

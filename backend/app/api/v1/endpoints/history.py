@@ -1,14 +1,17 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from typing import List
-import logging # Added import
+import logging  # Added import
 
-from backend.app.models.api_models import SessionHistoryResponse, InteractionOutput
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
 from backend.app.core.security import UserInfo, get_current_active_user
+from backend.app.models.api_models import InteractionOutput, SessionHistoryResponse
+from backend.app.models.firestore_models import (
+    InteractionHistory as FirestoreInteractionHistoryModel,
+)
 from backend.app.services.firestore_service import list_interaction_history_for_session
-from backend.app.models.firestore_models import InteractionHistory as FirestoreInteractionHistoryModel
 
 router = APIRouter()
-logger = logging.getLogger(__name__) # Added logger
+logger = logging.getLogger(__name__)  # Added logger
+
 
 @router.get("/{session_id}/history", response_model=SessionHistoryResponse)
 async def get_session_history(
@@ -17,8 +20,7 @@ async def get_session_history(
     limit: int = Query(default=20, ge=1, le=100),
     # Add page_token: Optional[str] = Query(None) for cursor-based pagination later
 ):
-    """
-    Retrieves the interaction history for a given session ID.
+    """Retrieves the interaction history for a given session ID.
     Ensures the authenticated user is associated with the session (or has rights to view it).
     """
     # Authorization check: Ensure current_user.user_id is allowed to view this session_id's history.
@@ -39,11 +41,16 @@ async def get_session_history(
         # For now, list_interaction_history_for_session takes session_id.
         # We must make sure the user_id matches.
 
-        history_docs: List[FirestoreInteractionHistoryModel] = await list_interaction_history_for_session(
-            session_id=session_id, limit=limit, order_by="timestamp", descending=False # typically history is viewed oldest to newest
+        history_docs: list[
+            FirestoreInteractionHistoryModel
+        ] = await list_interaction_history_for_session(
+            session_id=session_id,
+            limit=limit,
+            order_by="timestamp",
+            descending=False,  # typically history is viewed oldest to newest
         )
 
-        api_interactions: List[InteractionOutput] = []
+        api_interactions: list[InteractionOutput] = []
 
         if not history_docs and session_id:
             # If no docs, we can't confirm user_id for auth, but if session_id is intended to be unique to user
@@ -58,7 +65,9 @@ async def get_session_history(
             if doc.user_id != current_user.user_id:
                 # This indicates an attempt to access unauthorized data.
                 # Log the attempt and raise a 403/404.
-                logger.warning(f"User {current_user.user_id} attempted to access session {session_id} belonging to user {doc.user_id}.")
+                logger.warning(
+                    f"User {current_user.user_id} attempted to access session {session_id} belonging to user {doc.user_id}."
+                )
                 # Depending on policy, either filter out these specific messages or deny access to the whole session history.
                 # For strictness, if any part of the session doesn't match, deny all.
                 # However, if `list_interaction_history_for_session` could also filter by user_id, that would be cleaner.
@@ -68,15 +77,24 @@ async def get_session_history(
                 # For now, let's assume sessions are user-specific and the first record check is okay for MVP.
                 # A better approach would be to include user_id in the query to firestore_service if possible.
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN, # Or 404 if we want to obscure session existence
-                    detail="Not authorized to view this session history or session not found for this user."
+                    status_code=status.HTTP_403_FORBIDDEN,  # Or 404 if we want to obscure session existence
+                    detail="Not authorized to view this session history or session not found for this user.",
                 )
-            api_interactions.append(InteractionOutput.model_validate(doc)) # Convert from Firestore model
+            api_interactions.append(
+                InteractionOutput.model_validate(doc)
+            )  # Convert from Firestore model
 
-        return SessionHistoryResponse(session_id=session_id, interactions=api_interactions)
+        return SessionHistoryResponse(
+            session_id=session_id, interactions=api_interactions
+        )
 
-    except HTTPException: # Re-raise HTTPExceptions directly
+    except HTTPException:  # Re-raise HTTPExceptions directly
         raise
     except Exception as e:
-        logger.error(f"Error retrieving history for session {session_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Could not retrieve session history.")
+        logger.error(
+            f"Error retrieving history for session {session_id}: {e}", exc_info=True
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Could not retrieve session history.",
+        )

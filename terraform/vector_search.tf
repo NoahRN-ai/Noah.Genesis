@@ -6,7 +6,7 @@
 resource "google_storage_bucket" "noah_mvp_rag_data_bucket" {
   project                     = google_project.noah_mvp_project.project_id
   name                        = "bkt-noah-mvp-rag-data-${google_project.noah_mvp_project.project_id}" # Must be globally unique
-  location                    = var.gcp_region # Or multi-region if appropriate
+  location                    = var.gcp_region                                                        # Or multi-region if appropriate
   uniform_bucket_level_access = true
   storage_class               = "STANDARD"
 
@@ -48,19 +48,19 @@ resource "google_vertex_ai_index" "noah_mvp_rag_index" {
   display_name = "noah-mvp-rag-index"
   description  = "Vector index for Project Noah MVP RAG system."
   # index_update_method = "BATCH_UPDATE" # For initial population using contents_delta_uri or streaming.
-                                       # For an initially empty index created via TF, then populated by script,
-                                       # this might be better managed by the script calling update_embeddings.
-                                       # If populated at creation:
+  # For an initially empty index created via TF, then populated by script,
+  # this might be better managed by the script calling update_embeddings.
+  # If populated at creation:
   metadata {
     contents_delta_uri = "gs://${google_storage_bucket.noah_mvp_rag_data_bucket.name}/${var.rag_embeddings_gcs_prefix}" # Directory for JSONL files
     config {
-      dimensions = 768 # Dimension for textembedding-gecko@003
-      approximate_neighbors_count = 10 # Default, can be tuned
-      distance_measure_type = "DOT_PRODUCT_DISTANCE" # Or COSINE_DISTANCE, EUCLIDEAN_SQUARED
+      dimensions                  = 768                    # Dimension for textembedding-gecko@003
+      approximate_neighbors_count = 10                     # Default, can be tuned
+      distance_measure_type       = "DOT_PRODUCT_DISTANCE" # Or COSINE_DISTANCE, EUCLIDEAN_SQUARED
       # For ANN, choose an algorithm. Brute force for small exact results.
       # Sharding can be configured for larger datasets.
       algorithm_config {
-        tree_ah_config { # Example: Tree AH algorithm
+        tree_ah_config {                   # Example: Tree AH algorithm
           leaf_node_embedding_count = 1000 # Number of embeddings per leaf node
         }
         # Or brute_force_config {} for exact search (good for small datasets)
@@ -78,27 +78,27 @@ resource "google_vertex_ai_index_endpoint" "noah_mvp_rag_index_endpoint" {
   display_name = "noah-mvp-rag-index-endpoint"
   description  = "Endpoint for the Project Noah MVP RAG vector index."
   # network = google_compute_network.noah_mvp_vpc.id # For private endpoint (more secure)
-  public_endpoint_enabled = true                   # For MVP simplicity using public endpoint
-                                                   # Ensure appropriate auth for a public endpoint.
-                                                   # Cloud Run service account will need permissions.
+  public_endpoint_enabled = true # For MVP simplicity using public endpoint
+  # Ensure appropriate auth for a public endpoint.
+  # Cloud Run service account will need permissions.
 }
 
 # Deploying the index to the endpoint using a separate resource:
 resource "google_vertex_ai_deployed_index" "noah_mvp_rag_index_deployment_on_endpoint" {
-  project          = google_project.noah_mvp_project.project_id
-  region           = var.gcp_region
-  index_endpoint   = google_vertex_ai_index_endpoint.noah_mvp_rag_index_endpoint.id
-  index            = google_vertex_ai_index.noah_mvp_rag_index.name # Using the name attribute which is the full resource path for the index
-  deployed_index_id = "noah_mvp_rag_deployed_idx_v1" # User-defined ID for this deployment
-  display_name     = "Noah MVP RAG Index Deployment v1"
+  project           = google_project.noah_mvp_project.project_id
+  region            = var.gcp_region
+  index_endpoint    = google_vertex_ai_index_endpoint.noah_mvp_rag_index_endpoint.id
+  index             = google_vertex_ai_index.noah_mvp_rag_index.name # Using the name attribute which is the full resource path for the index
+  deployed_index_id = "noah_mvp_rag_deployed_idx_v1"                 # User-defined ID for this deployment
+  display_name      = "Noah MVP RAG Index Deployment v1"
 
   # Configuration for the deployment, e.g., machine type for serving
   # For many ANN indexes, specific machine types are recommended.
   # For MVP, default automatic_resources (if that's the provider default behavior for the index type) should be fine.
   # Explicitly using automatic_resources for clarity.
   automatic_resources {
-     min_replica_count = 1
-     max_replica_count = 1 # For MVP, start with 1, can scale later.
+    min_replica_count = 1
+    max_replica_count = 1 # For MVP, start with 1, can scale later.
   }
 
   # depends_on = [

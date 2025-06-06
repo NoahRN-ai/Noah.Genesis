@@ -14,15 +14,15 @@ variable "log_archive_retention_period_days" {
 }
 
 resource "google_storage_bucket" "noah_mvp_log_archive_bucket" {
-  project      = google_project.noah_mvp_project.project_id
-  name         = "bkt-noah-mvp-logs-archive-${google_project.noah_mvp_project.project_id}${var.log_archive_bucket_name_suffix}"
-  location     = var.gcp_region # Or a multi-region like "US" for higher availability of bucket metadata
-  storage_class = "STANDARD"    # Start with STANDARD, then transition using lifecycle rules
+  project                     = google_project.noah_mvp_project.project_id
+  name                        = "bkt-noah-mvp-logs-archive-${google_project.noah_mvp_project.project_id}${var.log_archive_bucket_name_suffix}"
+  location                    = var.gcp_region # Or a multi-region like "US" for higher availability of bucket metadata
+  storage_class               = "STANDARD"     # Start with STANDARD, then transition using lifecycle rules
   uniform_bucket_level_access = true
 
   lifecycle_rule {
     action {
-      type = "SetStorageClass"
+      type          = "SetStorageClass"
       storage_class = "NEARLINE"
     }
     condition {
@@ -32,7 +32,7 @@ resource "google_storage_bucket" "noah_mvp_log_archive_bucket" {
 
   lifecycle_rule {
     action {
-      type = "SetStorageClass"
+      type          = "SetStorageClass"
       storage_class = "COLDLINE"
     }
     condition {
@@ -70,9 +70,9 @@ variable "bigquery_log_dataset_location" {
 }
 
 resource "google_bigquery_dataset" "noah_mvp_logs_analysis_dataset" {
-  project    = google_project.noah_mvp_project.project_id
-  dataset_id = var.bigquery_log_dataset_id
-  location   = var.bigquery_log_dataset_location
+  project     = google_project.noah_mvp_project.project_id
+  dataset_id  = var.bigquery_log_dataset_id
+  location    = var.bigquery_log_dataset_location
   description = "Dataset for storing Project Noah MVP logs for analysis."
   # Default table expiration can be set here if desired
   # default_table_expiration_ms = 365 * 24 * 60 * 60 * 1000 # 1 year example
@@ -84,10 +84,10 @@ resource "google_bigquery_dataset" "noah_mvp_logs_analysis_dataset" {
 
 # Sink to Cloud Storage for archival
 resource "google_logging_project_sink" "noah_mvp_gcs_log_sink" {
-  project              = google_project.noah_mvp_project.project_id
-  name                 = "noah-mvp-gcs-archive-sink"
-  destination          = "storage.googleapis.com/${google_storage_bucket.noah_mvp_log_archive_bucket.name}"
-  filter               = "severity >= DEFAULT" # Captures most logs, can be adjusted
+  project                = google_project.noah_mvp_project.project_id
+  name                   = "noah-mvp-gcs-archive-sink"
+  destination            = "storage.googleapis.com/${google_storage_bucket.noah_mvp_log_archive_bucket.name}"
+  filter                 = "severity >= DEFAULT" # Captures most logs, can be adjusted
   unique_writer_identity = true
 }
 
@@ -100,10 +100,10 @@ resource "google_storage_bucket_iam_member" "gcs_log_sink_writer_permissions" {
 
 # Sink to BigQuery for analysis
 resource "google_logging_project_sink" "noah_mvp_bq_log_sink" {
-  project              = google_project.noah_mvp_project.project_id
-  name                 = "noah-mvp-bq-analysis-sink"
-  destination          = "bigquery.googleapis.com/projects/${google_project.noah_mvp_project.project_id}/datasets/${google_bigquery_dataset.noah_mvp_logs_analysis_dataset.dataset_id}"
-  filter               = "severity >= INFO" # Capture INFO and above for analysis, can be adjusted
+  project                = google_project.noah_mvp_project.project_id
+  name                   = "noah-mvp-bq-analysis-sink"
+  destination            = "bigquery.googleapis.com/projects/${google_project.noah_mvp_project.project_id}/datasets/${google_bigquery_dataset.noah_mvp_logs_analysis_dataset.dataset_id}"
+  filter                 = "severity >= INFO" # Capture INFO and above for analysis, can be adjusted
   unique_writer_identity = true
   # BigQuery options can be set here, e.g., use_partitioned_tables (default is true)
 }
@@ -232,9 +232,9 @@ resource "google_monitoring_alert_policy" "cloud_run_agent_5xx_error_alert" {
   conditions {
     display_name = "Cloud Run AI Agent Service - 5XX responses"
     condition_threshold {
-      filter     = "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.label.service_name=\"noah-mvp-agent-service\" metric.label.response_code_class=\"5xx\"" // Placeholder, update service_name
-      comparison = "COMPARISON_GT"
-      threshold_value = 5 # Alert if more than 5 errors...
+      filter          = "metric.type=\"run.googleapis.com/request_count\" resource.type=\"cloud_run_revision\" resource.label.service_name=\"noah-mvp-agent-service\" metric.label.response_code_class=\"5xx\"" // Placeholder, update service_name
+      comparison      = "COMPARISON_GT"
+      threshold_value = 5      # Alert if more than 5 errors...
       duration        = "300s" # ...in a 5-minute window
       aggregations {
         alignment_period   = "60s"

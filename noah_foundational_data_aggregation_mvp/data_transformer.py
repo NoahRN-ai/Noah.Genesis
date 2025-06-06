@@ -1,9 +1,9 @@
-import json
 import datetime
+import json
+
 
 def transform_data_for_ai(raw_data: dict) -> dict:
-    """
-    Placeholder function representing data transformation logic.
+    """Placeholder function representing data transformation logic.
     In a real-world scenario, this function would contain complex ETL logic
     to prepare data for AI/ML models or other analytical purposes.
     This could involve:
@@ -17,7 +17,9 @@ def transform_data_for_ai(raw_data: dict) -> dict:
     For now, it performs a simple transformation: adds a timestamp
     and returns the data nested under a 'processed_data' key.
     """
-    print(f"[{datetime.datetime.utcnow().isoformat()}] INFO: Called transform_data_for_ai with raw_data:")
+    print(
+        f"[{datetime.datetime.utcnow().isoformat()}] INFO: Called transform_data_for_ai with raw_data:"
+    )
     print(json.dumps(raw_data, indent=2))
 
     transformed_data = {
@@ -25,15 +27,18 @@ def transform_data_for_ai(raw_data: dict) -> dict:
         "original_data": raw_data,
         "ai_optimized_features": {
             # Example: could be flattened, aggregated, or feature-engineered data
-            "key_metric_1": raw_data.get("some_value", 0) * 2, # Simplified example
-            "description": f"Transformed data for {raw_data.get('patientId', 'unknown_patient')}"
-        }
+            "key_metric_1": raw_data.get("some_value", 0) * 2,  # Simplified example
+            "description": f"Transformed data for {raw_data.get('patientId', 'unknown_patient')}",
+        },
     }
 
-    print(f"[{datetime.datetime.utcnow().isoformat()}] INFO: Transformation complete. Result:")
+    print(
+        f"[{datetime.datetime.utcnow().isoformat()}] INFO: Transformation complete. Result:"
+    )
     print(json.dumps(transformed_data, indent=2))
 
     return transformed_data
+
 
 if __name__ == "__main__":
     print("Running example usage of data_transformer.py...")
@@ -43,7 +48,7 @@ if __name__ == "__main__":
         "patientId": "PATIENT_002",
         "systolic_bp": 120,
         "diastolic_bp": 80,
-        "notes": "Patient is stable."
+        "notes": "Patient is stable.",
     }
     print("\n--- Transforming Patient Data ---")
     transformed_patient_data = transform_data_for_ai(mock_raw_patient_data)
@@ -57,7 +62,7 @@ if __name__ == "__main__":
         "patientId": "PATIENT_003",
         "eventType": "MedicationAdministered",
         "details": {"medication": "Insulin", "dosage": "10 units"},
-        "some_value": 25
+        "some_value": 25,
     }
     print("\n--- Transforming Event Data ---")
     transformed_event_data = transform_data_for_ai(mock_raw_event_data)
