@@ -2,7 +2,9 @@
 import React, { useState, useEffect, useRef, FormEvent, KeyboardEvent } from 'react';
 import {
   Box, Paper, ScrollArea, Stack, Group, Avatar, Text, Textarea, ActionIcon,
-  Loader, useMantineTheme, Tooltip, Kbd, UnstyledButton, ThemeIcon, rem
+  Loader, useMantineTheme, Tooltip, Kbd, UnstyledButton, ThemeIcon, rem,
+  SegmentedControl, // Import SegmentedControl
+  Center, // For initial empty message
 } from '@mantine/core';
 import {
   IconSend, IconUser, IconRobotFilled, IconMicrophone, IconAlertTriangleFilled,
@@ -225,6 +227,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   const [inputValue, setInputValue] = useState('');
   const [isSending, setIsSending] = useState(false); // Renamed from isLoading for clarity
   const [currentSessionId, setCurrentSessionId] = useState<string>(initialSessionId);
+  const [chatMode, setChatMode] = useState<string>("default"); // State for chat mode
 
   const scrollViewport = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -275,9 +278,11 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     showAgentTypingIndicator(true);
 
     try {
+      // Pass the chatMode in the payload
       const response = await sendChatMessage({
         user_query_text: queryText,
         session_id: currentSessionId,
+        mode: chatMode, // Include the selected chat mode
       });
 
       addDisplayMessage({
@@ -317,10 +322,35 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', height: '100%', flexGrow: 1, backgroundColor: theme.colorScheme === 'dark' ? theme.colors.noahDarkGray[9] : theme.colors.noahDarkGray[0] }}>
-      <ScrollArea.Autosize mah={'calc(100% - 90px)'} /* Max height leaving space for input */ viewportRef={scrollViewport} style={{ flexGrow: 1 }} p="md" type="auto">
+      {/* Mode Selector - Placed above the message list or input area */}
+      <Paper p="xs" withBorder radius={0} style={{
+          backgroundColor: theme.colorScheme === 'dark' ? theme.colors.noahDarkGray[8] : theme.white,
+          borderBottom: `${rem(1)} solid ${theme.colorScheme === 'dark' ? theme.colors.noahDarkGray[7] : theme.colors.noahDarkGray[2]}`,
+          // Approximately 45-50px height with padding
+        }}>
+        <Group justify="center"> {/* Center the segmented control */}
+          <SegmentedControl
+            value={chatMode}
+            onChange={setChatMode} // Directly use setChatMode if no other logic needed
+            data={[
+              { label: 'Noah AI RN (Default)', value: 'default' },
+              { label: 'Hippocrates (Research)', value: 'hippocrates' },
+            ]}
+            color="noahBlue" // Use a color from your theme
+            size="sm" // Adjust size as needed
+          />
+        </Group>
+      </Paper>
+
+      <ScrollArea.Autosize mah={'calc(100% - 90px - 50px)'} /* Adjusted for mode selector height (input area 90px + mode selector ~50px) */ viewportRef={scrollViewport} style={{ flexGrow: 1 }} p="md" type="auto">
         <Stack gap="md" pb="xl">
           {messages.length === 0 && !isSending && (
-            <Center style={{ height: '50vh', opacity: 0.6 }}>
+            // Center component from Mantine can be used for better vertical centering
+            <Center style={{ height: 'calc(100vh - 90px - 50px - 100px)', opacity: 0.6 }}>
+              {/* Adjust height considering other elements and desired empty state appearance */}
+            {/* Center component from Mantine can be used for better vertical centering */}
+            <Center style={{ height: 'calc(100vh - 90px - 50px - 100px)', opacity: 0.6 }}>
+              {/* Adjust height considering other elements and desired empty state appearance */}
               <Stack align="center" gap="xs">
                 <NoahAgentAvatar/>
                 <Text size="lg" c="dimmed">Noah.AI RN is ready.</Text>
@@ -336,7 +366,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       <Paper
         component="form"
-        onSubmit={handleSendMessage}
+        onSubmit={handleSendMessage} // This will be updated in the next step to include chatMode
         p="md"
         radius={0}
         style={{
