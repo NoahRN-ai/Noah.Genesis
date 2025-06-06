@@ -6,6 +6,7 @@ from backend.app.models.api_models import ChatRequest, ChatResponse
 from backend.app.core.security import UserInfo, get_current_active_user
 from backend.app.agent.memory import save_interaction, load_session_history
 from backend.app.services.llm_service import get_llm_response
+from backend.app.agents.hippocrates_agent import invoke_hippocrates_agent # New import
 from backend.app.models.firestore_models import InteractionActor
 # ToolCall and ToolResponse from firestore_models are named PydanticToolCall and PydanticToolResponse in the prompt output for chat.py
 # but firestore_models.py itself defines them as ToolCall and ToolResponse.
@@ -58,25 +59,56 @@ async def handle_chat_message(
     # 3. Get LLM response (Simplified for Task 1.5 - direct call)
     #    Phase 3 will replace this with LangGraph invocation.
     #    For now, no complex tool schema passed, LLM responds based on text.
-    try:
-        ai_text_response = await get_llm_response(
-            prompt=request.user_query_text,
-            conversation_history=conversation_history_lc_messages,
-            llm_model_name=settings.DEFAULT_LLM_MODEL_NAME
-            # tools_schema can be added here later when LangGraph orchestrates tool definitions
-        )
-        if ai_text_response.startswith("Error:"): # Handle errors from llm_service
-            logger.error(f"LLM service error for session {session_id}: {ai_text_response}")
-            # Fallback response or re-raise as appropriate HTTPException
-            # For MVP, we can return this error message to the user for now to indicate issue
-            pass # Let it be saved as is, and returned.
 
-    except Exception as e:
-        logger.error(f"Critical error calling LLM service for session {session_id}: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="The AI agent is currently unavailable. Please try again later."
-        )
+    ai_text_response = ""
+    if request.mode == "hippocrates":
+        logger.info(f"Using Hippocrates agent for session {session_id} with user query: '{request.user_query_text}'")
+        try:
+            # Ensure conversation_history_lc_messages is in the format List[dict] as expected by the agent
+            # The load_session_history function should already return List[BaseMessage],
+            # which might need conversion if HippocratesAgentState.conversation_history expects dicts.
+            # For now, assuming it's compatible or Hippocrates agent handles it.
+            # Example conversion if needed:
+            # history_for_agent = [{"role": msg.type, "content": msg.content} for msg in conversation_history_lc_messages]
+
+            ai_text_response = await invoke_hippocrates_agent(
+                user_query=request.user_query_text,
+                # TODO: Confirm format of conversation_history_lc_messages is List[Dict] or adapt.
+                # Assuming load_session_history provides a list of BaseMessage-like objects that need conversion
+                # to the List[Dict] format shown in hippocrates_agent.py's main_test.
+                # If conversation_history_lc_messages is already List[Dict], no conversion is needed.
+                # For this MVP, we'll pass it as is and adjust the agent or here later if format mismatch.
+                conversation_history=[{"role": msg.type if hasattr(msg, 'type') else "unknown", "content": msg.content} for msg in conversation_history_lc_messages]
+
+            )
+            if not ai_text_response or "error" in ai_text_response.lower() or "Hippocrates Agent encountered an issue" in ai_text_response:
+                 logger.warning(f"Hippocrates agent may have returned an empty or error response for session {session_id}: {ai_text_response}")
+        except Exception as e:
+            logger.error(f"Error calling Hippocrates agent for session {session_id}: {e}", exc_info=True)
+            ai_text_response = f"Error: Hippocrates agent failed. {str(e)}" # Provide error info in response for MVP debugging
+
+    else: # Default mode
+        logger.info(f"Using default LLM for session {session_id} with user query: '{request.user_query_text}'")
+        try:
+            ai_text_response = await get_llm_response(
+                prompt=request.user_query_text,
+                conversation_history=conversation_history_lc_messages, # This is List[BaseMessage]
+                llm_model_name=settings.DEFAULT_LLM_MODEL_NAME
+                # tools_schema can be added here later when LangGraph orchestrates tool definitions
+            )
+            if ai_text_response.startswith("Error:"): # Handle errors from llm_service
+                logger.error(f"LLM service error for session {session_id}: {ai_text_response}")
+                # Let it be saved as is, and returned.
+        except Exception as e:
+            logger.error(f"Critical error calling default LLM service for session {session_id}: {e}", exc_info=True)
+            # Consistent error handling with previous state, but consider if HTTPException is always desired
+            # For MVP, returning an error message in the response might be more informative than a generic HTTP error.
+            ai_text_response = f"Error: The default AI service encountered a problem. {str(e)}"
+            # Re-raising HTTPException might be too disruptive if other parts of the flow can handle a text error.
+            # raise HTTPException(
+            #     status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            #     detail="The AI agent is currently unavailable. Please try again later."
+            # )
 
     # 4. Save AI's response to interaction history
     try:

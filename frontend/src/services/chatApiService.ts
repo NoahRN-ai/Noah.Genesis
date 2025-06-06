@@ -4,10 +4,12 @@ import { ChatRequestPayload, ChatResponsePayload } from '../types/api';
 
 export const sendChatMessage = async (payload: ChatRequestPayload): Promise<ChatResponsePayload> => {
   try {
+    // The payload already includes the mode due to ChatRequestPayload modification in types/api.ts
     const response = await apiClient.post<ChatResponsePayload>('/chat', payload);
     return response.data;
   } catch (error: any) { // Better to type as AxiosError if using axios explicitly
-    console.error('Error sending chat message via chatApiService:', error);
+    // console.error('Error sending chat message via chatApiService:', error); // Original line
+    console.error('Error sending chat message via chatApiService:', error, 'Payload:', payload); // Log payload for debugging
 
     let errorMessage = 'Failed to get a response from Noah.AI. Please check your connection and try again.';
     if (error.response) {
