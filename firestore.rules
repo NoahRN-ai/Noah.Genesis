@@ -1,0 +1,126 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions (conceptual, some might need adjustments based on exact data models)
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    // Get user data for role checks, etc.
+    function getUserData(userId) {
+      return get(/databases/$(database)/documents/user_profiles/$(userId)).data;
+    }
+
+    function isUserRole(userId, roleName) {
+      let userData = getUserData(userId);
+      return isSignedIn() && userData.role == roleName;
+    }
+
+    function isPatient(userId) {
+      // Assuming 'patient' role exists in user_profiles
+      // Or, if PatientProfile is the definitive source, this might change
+      return isUserRole(userId, 'patient');
+    }
+
+    function isNurse(userId) {
+      return isUserRole(userId, 'nurse');
+    }
+
+    // --- User Profiles ---
+    // Users can read and update their own profile.
+    // Updates are restricted to specific fields.
+    match /user_profiles/{userId} {
+      allow read: if isUser(userId);
+      allow create: if isSignedIn() && request.auth.uid == userId
+                    // User can create their own profile.
+                    // Role should ideally be set by a trusted backend process or default to 'patient'.
+                    // Disallow setting 'role' during initial client-side creation if it's a sensitive field.
+                    && (!('role' in request.resource.data) || request.resource.data.role == 'patient');
+      allow update: if isUser(userId)
+                    // User can only update specific fields.
+                    && request.resource.data.keys().hasOnly(['display_name', 'preferences', 'email', 'photoURL', 'other_patient_specific_field'])
+                    // Ensure non-updatable fields are not changed or not present in the request.
+                    // 'email' and 'photoURL' might be updated by Firebase Auth provider, synced by backend.
+                    // For direct updates, only allow 'display_name' and 'preferences'.
+                    && (!('user_id' in request.resource.data) || request.resource.data.user_id == resource.data.user_id)
+                    && (!('role'in request.resource.data) || request.resource.data.role == resource.data.role);
+      // No direct delete by users for now, could be an admin/backend function.
+      allow delete: if false;
+    }
+
+    // --- Patient Data Logs ---
+    // Patients can CRUD their own logs.
+    // Nurses linked to the patient (conceptual for MVP) might have read/create/update access.
+    match /patient_data_logs/{logId} {
+      allow read: if isSignedIn() &&
+                     (request.auth.uid == resource.data.user_id || isNurse(request.auth.uid)); // Nurse can read any log
+      allow create: if isSignedIn() &&
+                      (request.auth.uid == request.resource.data.user_id); // User must be owner
+                      // Add nurse check if nurses can create for patients:
+                      // || (isNurse(request.auth.uid) && request.resource.data.user_id == SOME_PATIENT_ID_NURSE_IS_LINKED_TO)
+      allow update: if isSignedIn() &&
+                      (request.auth.uid == resource.data.user_id); // Owner can update
+                      // Add nurse check for updates
+      allow delete: if isSignedIn() &&
+                      (request.auth.uid == resource.data.user_id); // Owner can delete
+                      // Add nurse check for deletes
+    }
+
+    // --- Interaction History ---
+    // Users can only read their own interaction history.
+    // Creation/Update/Delete should only be by the backend service.
+    match /interaction_history/{interactionId} {
+      allow read: if isSignedIn() && request.auth.uid == resource.data.user_id;
+      allow create: if false; // Backend service only
+      allow update: if false; // Backend service only
+      allow delete: if false; // Backend service only
+    }
+
+    // --- Noah MVP Patient Profiles (FHIR-like Patient resources) ---
+    // patientId is the auth.uid for a patient user.
+    match /noah_mvp_patients/{patientId} {
+      allow read: if isSignedIn() && (isUser(patientId) || isNurse(request.auth.uid)); // Patient reads their own, Nurse can read any.
+      allow create: if false; // Assume creation by a trusted backend process.
+                            // If patients can create, it would be: isUser(patientId)
+      allow update: if isUser(patientId)
+                    // Patient can update limited fields.
+                    && request.resource.data.keys().hasOnly(['active', 'telecom', 'address', 'contact']) // Example updatable fields
+                    // Ensure non-updatable core fields are not part of the update.
+                    && !request.resource.data.keys().hasAny(['id', 'identifier', 'managingOrganization', 'link']);
+                    // Add nurse update capability if needed, likely with more restrictions or specific logic.
+      allow delete: if false; // Typically archived, not deleted by users.
+    }
+
+    // --- Noah MVP Observations (nested under a patient) ---
+    match /noah_mvp_patients/{patientId}/noah_mvp_observations/{observationId} {
+      allow read: if isSignedIn() && (isUser(patientId) || isNurse(request.auth.uid)); // Patient reads their own, Nurse can read any.
+      allow create: if false; // Typically by backend/providers.
+                            // If nurses can create: isNurse(request.auth.uid) && canNurseAccessPatient(request.auth.uid, patientId)
+      allow update: if false; // Typically by backend/providers.
+      allow delete: if false; // Typically by backend/providers.
+    }
+
+    // --- Noah MVP Medication Statements (nested under a patient) ---
+    match /noah_mvp_patients/{patientId}/noah_mvp_medication_statements/{statementId} {
+      allow read: if isSignedIn() && (isUser(patientId) || isNurse(request.auth.uid)); // Patient reads their own, Nurse can read any.
+      allow create: if false; // Typically by backend/providers.
+      allow update: if false; // Typically by backend/providers.
+      allow delete: if false; // Typically by backend/providers.
+    }
+
+    // --- AI Contextual Stores ---
+    // patientId is the user_id of the patient.
+    match /ai_contextual_stores/{patientId} {
+      allow read: if isUser(patientId); // Patient can read their own store.
+      allow create: if false; // Created by backend agent.
+      allow update: if false; // Updated by backend agent.
+      allow delete: if false; // Managed by backend agent.
+    }
+  }
+}
