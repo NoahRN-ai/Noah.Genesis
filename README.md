@@ -226,7 +226,7 @@ To run the full application locally:
 *   `frontend/`: Contains the React/TypeScript frontend application.
     *   `src/`: Frontend source code (components, pages, services, contexts).
 *   `scripts/`: Utility scripts for development and setup.
-*   `terraform/`: Infrastructure as Code for GCP resources.
+*   `terraform/`: Infrastructure as Code (Terraform) for provisioning GCP resources. See `DEVELOPMENT.MD` for more details on its usage and context.
 *   `DEVELOPMENT.md`: Detailed development practices and guidelines.
 *   `Makefile`: Shortcuts for common development tasks.
 *   `pyproject.toml`: Backend dependency management with Poetry.
