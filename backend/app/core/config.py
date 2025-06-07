@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     RAG_CHUNK_MAP_GCS_OBJECT_NAME: Optional[str] = "metadata/id_to_chunk_details_map.json"
     VERTEX_AI_INDEX_ENDPOINT_ID: Optional[str] = None # Full Resource Name or Numeric ID
     VERTEX_AI_DEPLOYED_INDEX_ID: Optional[str] = None # User-defined ID for deployed index
+    RAG_TOP_K: int = 3 # Default value for number of chunks to retrieve
 
     # Firebase configuration for auth - set via env in Cloud Run
     # If using a service account JSON for Firebase Admin SDK:

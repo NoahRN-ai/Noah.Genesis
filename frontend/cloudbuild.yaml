@@ -1,0 +1,74 @@
+# Google Cloud Build configuration for Project Noah MVP Frontend (React + Vite)
+# Deploys to Firebase Hosting
+
+substitutions:
+  _GCP_PROJECT_ID: ${PROJECT_ID}                 # GCP Project ID (usually inferred by Cloud Build)
+  _FIREBASE_PROJECT_ID: ${PROJECT_ID}            # Firebase Project ID (often same as GCP_PROJECT_ID, ensure this is correct)
+  _FIREBASE_TOKEN_SECRET_ID: firebase-deploy-token # Secret ID in GCP Secret Manager for Firebase CI token
+  _FIREBASE_TOKEN_SECRET_VERSION: latest         # Secret version (e.g., "latest" or a specific version number)
+  _NODE_VERSION: '20'                            # Node.js LTS version for the build
+  # Add substitutions for Vite environment variables here, e.g.:
+  # _VITE_API_BASE_URL: 'https://your-backend-service-url.a.run.app/api/v1'
+  # _VITE_FIREBASE_API_KEY: 'your-firebase-api-key'
+  # _VITE_FIREBASE_AUTH_DOMAIN: 'your-project-id.firebaseapp.com'
+  # _VITE_FIREBASE_PROJECT_ID_CONFIG: 'your-project-id' # Note: _FIREBASE_PROJECT_ID is for deploy command
+  # _VITE_FIREBASE_STORAGE_BUCKET: 'your-project-id.appspot.com'
+  # _VITE_FIREBASE_MESSAGING_SENDER_ID: 'your-sender-id'
+  # _VITE_FIREBASE_APP_ID: 'your-app-id'
+
+timeout: '900s' # 15 minutes build timeout
+
+steps:
+  # 1. Setup Node.js, pnpm, and Firebase Tools
+  - name: 'node:${_NODE_VERSION}'
+    id: SetupEnvironment
+    entrypoint: /bin/bash
+    args:
+      - '-c'
+      - |
+        echo "Node version: $(node -v)"
+        npm install -g pnpm@latest firebase-tools
+        echo "pnpm version: $(pnpm -v)"
+        echo "firebase tools version: $(firebase --version)"
+
+  # 2. Install Frontend Dependencies
+  - name: 'node:${_NODE_VERSION}'
+    id: InstallDependencies
+    entrypoint: pnpm
+    args: ['install', '--frozen-lockfile'] # Ensures reproducible builds
+    dir: 'frontend/'
+
+  # 3. Build the React/Vite application for production
+  # Pass Vite environment variables using the `env` directive, sourced from substitutions.
+  - name: 'node:${_NODE_VERSION}'
+    id: BuildApplication
+    entrypoint: pnpm
+    args: ['run', 'build']
+    dir: 'frontend/'
+    env:
+      # Example of setting build-time env vars for Vite from substitutions:
+      - 'VITE_API_BASE_URL=${_VITE_API_BASE_URL}'
+      - 'VITE_FIREBASE_API_KEY=${_VITE_FIREBASE_API_KEY}'
+      - 'VITE_FIREBASE_AUTH_DOMAIN=${_VITE_FIREBASE_AUTH_DOMAIN}'
+      - 'VITE_FIREBASE_PROJECT_ID=${_VITE_FIREBASE_PROJECT_ID_CONFIG}' # Use a distinct substitution if different from _FIREBASE_PROJECT_ID for deploy
+      - 'VITE_FIREBASE_STORAGE_BUCKET=${_VITE_FIREBASE_STORAGE_BUCKET}'
+      - 'VITE_FIREBASE_MESSAGING_SENDER_ID=${_VITE_FIREBASE_MESSAGING_SENDER_ID}'
+      - 'VITE_FIREBASE_APP_ID=${_VITE_FIREBASE_APP_ID}'
+
+  # 4. Deploy to Firebase Hosting
+  # Uses the Firebase token made available via 'availableSecrets'.
+  - name: 'node:${_NODE_VERSION}' # Environment where firebase-tools is installed
+    id: DeployToFirebaseHosting
+    entrypoint: /bin/bash
+    dir: 'frontend/' # firebase.json is expected here
+    args:
+      - '-c'
+      - |
+        echo "Deploying to Firebase Project: ${_FIREBASE_PROJECT_ID}"
+        firebase deploy --token "$$FIREBASE_TOKEN_FROM_SECRET" --only hosting --project ${_FIREBASE_PROJECT_ID} --non-interactive --force
+
+# Make the Firebase deploy token available to the build steps securely.
+availableSecrets:
+  secretManager:
+  - versionName: projects/${_GCP_PROJECT_ID}/secrets/${_FIREBASE_TOKEN_SECRET_ID}/versions/${_FIREBASE_TOKEN_SECRET_VERSION}
+    env: 'FIREBASE_TOKEN_FROM_SECRET' # Access as $$FIREBASE_TOKEN_FROM_SECRET or $FIREBASE_TOKEN_FROM_SECRET in bash scripts

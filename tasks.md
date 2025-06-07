@@ -194,6 +194,169 @@ This section tracks the high-level development tasks for Project Noah MVP V1.0, 
 **Status:** Open
 ---
 
+## VIII. Mock Data and Placeholder Implementations Audit
+
+This section lists identified mock data, placeholder functions, and in-memory data stores used across the Project Noah codebase. These are typically implemented for MVP development, testing, or when actual backend services/external APIs are not yet integrated. They should be progressively replaced with real implementations.
+
+**ID:** `MOCK-AUDIT-001`
+**Title:** Hippocrates Agent Mock Data & Placeholders
+**Description:** The `hippocrates_agent.py` uses several placeholders for its research and response generation workflow.
+**Category:** Backend Agents, Mock Data
+**Type:** Refactoring, Enhancement
+**Affected Files/Modules:** `backend/app/agents/hippocrates_agent.py`
+**Priority:** [P2] Medium
+**Status:** Open
+**Details:**
+    *   **`medical_literature_search_tool` function (lines 20-26):**
+        *   **Mock:** Placeholder tool returning hardcoded mock search results (2 mock studies).
+        *   **Represents:** Calls to actual medical literature databases.
+        *   **Potential Real Data Source(s)/API(s):** Vertex AI Search (with medical datasets), PubMed API, Google Scholar API, Semantic Scholar API.
+        *   **High-Level Integration Strategy:**
+            *   Modify `medical_literature_search_tool` to use chosen service SDK (e.g., Vertex AI Search SDK) or HTTP client (`requests` for REST APIs).
+            *   Implement authentication (Google Cloud ADC for Vertex AI, API keys for others).
+            *   Transform API responses to `List[dict]` with `title`, `summary`, `url`.
+            *   Add API/service configurations (endpoints, project/dataset IDs, keys) to `backend/app/core/config.py` or environment variables.
+        *   **Conceptual Priority:** P0 - Critical (Core to Hippocrates agent's purpose of research).
+        *   **Note:** Contains `TODO: Replace with actual medical literature search tool integration`.
+    *   **`start_research_node` function (lines 30-35):**
+        *   **Mock:** Simple pass-through for `research_question`.
+        *   **Represents:** Potential LLM call to refine user query.
+        *   **Potential Real Data Source(s)/API(s):** `llm_service.py` (Vertex AI Gemini).
+        *   **High-Level Integration Strategy:** Call `llm_service.get_llm_response` with a prompt designed to refine `state['user_query']` into `state['research_question']`.
+        *   **Conceptual Priority:** P1 - Important (Enhances quality of research by refining the question).
+        *   **Note:** Contains `TODO: Add LLM call to refine user_query into a research_question`.
+    *   **`analyze_search_results_node` function (lines 47-56):**
+        *   **Mock:** Simple analysis by concatenating mock search result summaries.
+        *   **Represents:** LLM call to analyze and summarize actual search results.
+        *   **Potential Real Data Source(s)/API(s):** `llm_service.py` (Vertex AI Gemini).
+        *   **High-Level Integration Strategy:** Call `llm_service.get_llm_response` with a prompt that takes `state['search_results']` and generates `state['analysis_summary']`.
+        *   **Conceptual Priority:** P0 - Critical (Core to processing research results for Hippocrates agent).
+        *   **Note:** Contains `TODO: Replace with LLM call to analyze/summarize search results`.
+    *   **`synthesize_response_node` function (lines 58-70):**
+        *   **Mock:** Uses an f-string template to generate the final response from mock analysis.
+        *   **Represents:** LLM call to synthesize a response.
+        *   **Potential Real Data Source(s)/API(s):** `llm_service.py` (Vertex AI Gemini).
+        *   **High-Level Integration Strategy:** Call `llm_service.get_llm_response` using `state['user_query']` and `state['analysis_summary']` to generate `state['final_response']`.
+        *   **Conceptual Priority:** P0 - Critical (Core to generating the final output for Hippocrates agent).
+        *   **Note:** Contains `TODO: Replace with LLM call to synthesize response based on analysis and query`.
+
+**ID:** `MOCK-AUDIT-002`
+**Title:** Agent Interfaces Orchestration Fallbacks
+**Description:** The `agent_interfaces.py` file in `noah_agent_orchestration_groundwork` provides facade functions that attempt to call actual agent MVP implementations. If these imports fail, it uses local fallback mock data.
+**Category:** Backend Agents, Mock Data
+**Type:** Refactoring, Enhancement
+**Affected Files/Modules:** `noah_agent_orchestration_groundwork/agent_interfaces.py`
+**Priority:** [P2] Medium
+**Status:** Open
+**Details:**
+    *   **`PSA_PROFILES` (line 30, fallback line 33):**
+        *   **Mock:** Dictionary of patient profiles (2 mock patients in fallback).
+        *   **Represents:** Patient data from Firestore or similar.
+        *   **Potential Real Data Source(s)/API(s):** Firestore (via `firestore_service.py` and `PatientProfile` model).
+        *   **High-Level Integration Strategy:** Ensure `patient_summary_agent.py` (or equivalent) correctly imports and uses `firestore_service.py` for profile data. Fallbacks become obsolete if imports are reliable.
+        *   **Conceptual Priority:** P3 - Testing/Demo/Internal (These fallbacks should ideally not be used if main agents are integrated).
+    *   **`SECA_SHARED_EVENTS` (line 44, fallback line 47):**
+        *   **Mock:** Dictionary to store event logs, keyed by patient ID. Fallback is an empty dict.
+        *   **Represents:** Event data from AlloyDB or similar.
+        *   **Potential Real Data Source(s)/API(s):** AlloyDB (schema defined in `noah_foundational_data_aggregation_mvp/alloydb_schemas.sql`), or Firestore for event logs.
+        *   **High-Level Integration Strategy:** Ensure `shift_event_capture.py` (or equivalent) correctly writes to the chosen persistent event store. Fallbacks become obsolete.
+        *   **Conceptual Priority:** P3 - Testing/Demo/Internal.
+    *   **`TLM_TASKS_DB` (line 62, fallback line 65):**
+        *   **Mock:** List to store To-Do task dictionaries. Fallback is an empty list.
+        *   **Represents:** Task data from a database or task management system.
+        *   **Potential Real Data Source(s)/API(s):** Firestore or AlloyDB.
+        *   **High-Level Integration Strategy:** Ensure `todo_list_manager.py` (or equivalent) correctly uses a persistent store. Fallbacks become obsolete.
+        *   **Conceptual Priority:** P3 - Testing/Demo/Internal.
+    *   **Facade function fallbacks:** `call_data_aggregation_firestore`, `call_data_aggregation_alloydb_events`, `call_patient_summary_agent`, `call_shift_event_capture_agent`, `call_todo_list_manager` all have logic to use these mock stores if their primary imports fail. Their real sources are the same as the primary agents they try to call.
+        *   **High-Level Integration Strategy:** Focus on making primary agent integrations robust. Log warnings if fallbacks are ever used in production.
+        *   **Conceptual Priority:** P3 - Testing/Demo/Internal.
+
+**ID:** `MOCK-AUDIT-003`
+**Title:** Patient Summary Agent Mock Data & Placeholders
+**Description:** The `patient_summary_agent.py` in `noah_patient_summary_agent_mvp` heavily relies on mock data and simulated functionalities.
+**Category:** Backend Agents, Mock Data
+**Type:** Refactoring, Enhancement
+**Affected Files/Modules:** `noah_patient_summary_agent_mvp/patient_summary_agent.py`, `noah_patient_summary_agent_mvp/mock_clinical_kb.json`
+**Priority:** [P1] High (as this is a core agent MVP)
+**Status:** Open
+**Details:**
+    *   **`MOCK_PATIENT_PROFILES` dictionary (lines 6-25):**
+        *   **Mock:** Hardcoded profiles for "patient123" and "patient456".
+        *   **Represents:** Patient master data.
+        *   **Potential Real Data Source(s)/API(s):** Firestore (via `firestore_service.py` and `PatientProfile` model), FHIR server API, EHR system API, or a clinical data warehouse (e.g., BigQuery with healthcare data).
+        *   **High-Level Integration Strategy:** Create a data service module (e.g., `fhir_service.py`, `ehr_service.py`, or extend `firestore_service.py`). This service handles API/DB calls, auth, and data mapping to Python dicts/Pydantic models. Update agent to use this service. Configure connection details and auth.
+        *   **Conceptual Priority:** P0 - Critical (Core to patient summary generation).
+    *   **`MOCK_EVENT_LOGS` dictionary (lines 27-46):**
+        *   **Mock:** Hardcoded event logs for "patient123" and "patient456".
+        *   **Represents:** Patient event data.
+        *   **Potential Real Data Source(s)/API(s):** AlloyDB (schema in `noah_foundational_data_aggregation_mvp/alloydb_schemas.sql`), FHIR server API (e.g., Observation resources), or other event logging systems.
+        *   **High-Level Integration Strategy:** Similar to profiles, create/use a service for event data. This service would connect to AlloyDB (using SQLAlchemy or Google Cloud SDKs) or a FHIR server. Agent calls this service. Map raw data to Python dicts. Configure connections.
+        *   **Conceptual Priority:** P0 - Critical (Core to patient summary context).
+    *   **`MOCK_CLINICAL_KB` (loaded from `mock_clinical_kb.json`, lines 49-54):**
+        *   **Mock:** 5 mock clinical articles loaded from `mock_clinical_kb.json`.
+        *   **Represents:** Real clinical knowledge base / RAG vector store.
+        *   **Potential Real Data Source(s)/API(s):** Vertex AI Search (with uploaded clinical documents/textbooks), a dedicated graph database, or an external clinical knowledge base API.
+        *   **High-Level Integration Strategy:** If using Vertex AI Search, ingest actual KB content into a datastore. Update `query_vertex_ai_search` to use Vertex AI Search SDK. If using external API, implement an API client. Configure datastore ID/API details.
+        *   **Conceptual Priority:** P1 - Important (If RAG via Vertex AI Search is the primary, this direct file use is secondary. If this IS the RAG source, then P0).
+    *   **`query_vertex_ai_search` function (lines 65-86):**
+        *   **Mock:** Placeholder simulating RAG queries against `MOCK_CLINICAL_KB` using simple keyword matching.
+        *   **Represents:** Calls to Vertex AI Search or similar RAG system.
+        *   **Potential Real Data Source(s)/API(s):** Vertex AI Search API.
+        *   **High-Level Integration Strategy:** Ensure this function uses the Vertex AI Search SDK, authenticates via ADC, and queries the correct datastore. Configure project and datastore IDs.
+        *   **Conceptual Priority:** P0 - Critical (Core to providing accurate, evidence-based summaries).
+    *   **`generate_summary_with_llm` function (lines 88-130):**
+        *   **Mock:** Placeholder simulating LLM calls using f-strings to construct summaries.
+        *   **Represents:** Calls to MedGemma/Gemini or other LLMs.
+        *   **Potential Real Data Source(s)/API(s):** `llm_service.py` (Vertex AI Gemini).
+        *   **High-Level Integration Strategy:** Replace f-string logic with calls to `backend.app.services.llm_service.get_llm_response`, passing appropriately constructed prompts and context.
+        *   **Conceptual Priority:** P0 - Critical (Core to summary generation; assumes `llm_service.py` is the actual LLM interface).
+
+**ID:** `MOCK-AUDIT-004`
+**Title:** Shift Event Capture Agent Mock Data & Placeholders
+**Description:** The `shift_event_capture.py` in `noah_shift_event_capture_agent_mvp` uses an in-memory store and placeholder functions.
+**Category:** Backend Agents, Mock Data
+**Type:** Refactoring, Enhancement
+**Affected Files/Modules:** `noah_shift_event_capture_agent_mvp/shift_event_capture.py`
+**Priority:** [P1] High (as this is a core agent MVP)
+**Status:** Open
+**Details:**
+    *   **`SHARED_MOCK_EVENTS_DB` dictionary (line 8):**
+        *   **Mock:** In-memory dictionary for storing event data.
+        *   **Represents:** Event database like AlloyDB.
+        *   **Potential Real Data Source(s)/API(s):** AlloyDB (schema in `noah_foundational_data_aggregation_mvp/alloydb_schemas.sql`), Firestore, or another persistent database.
+        *   **High-Level Integration Strategy:** Modify `log_event` (and its caller `store_event_in_alloydb`) to use chosen database SDK (e.g., `google-cloud-firestore`, `sqlalchemy` with AlloyDB connector). Define data models/schemas for the chosen DB. Configure connection details and auth (IAM for GCP DBs).
+        *   **Conceptual Priority:** P0 - Critical (Core to logging and persisting shift events).
+    *   **`store_event_in_alloydb` function (lines 56-88):**
+        *   **Mock:** Placeholder that writes to `SHARED_MOCK_EVENTS_DB`.
+        *   **Represents:** Database write operations to AlloyDB.
+        *   **Potential Real Data Source(s)/API(s):** AlloyDB client library, Firestore client library.
+        *   **High-Level Integration Strategy:** This function should be refactored to become the actual DB interaction logic using the chosen DB SDK, as part of the `SHARED_MOCK_EVENTS_DB` replacement.
+        *   **Conceptual Priority:** P0 - Critical (Part of the `SHARED_MOCK_EVENTS_DB` integration).
+    *   **`transcribe_voice_input` function (lines 90-100):**
+        *   **Mock:** Placeholder simulating Speech-to-Text; returns hardcoded transcriptions.
+        *   **Represents:** Calls to a Speech-to-Text service.
+        *   **Potential Real Data Source(s)/API(s):** Google Cloud Speech-to-Text API.
+        *   **High-Level Integration Strategy:** Replace mock logic with calls to Google Cloud Speech-to-Text SDK. Handle API authentication (ADC). The calling function (e.g., `log_general_note_from_voice`) would manage audio input (e.g., from frontend) and pass to this service. Configure API details if needed.
+        *   **Conceptual Priority:** P1 - Important (If voice input is a key feature).
+
+**ID:** `MOCK-AUDIT-005`
+**Title:** Plan of Care To-Do List Manager Mock Data
+**Description:** The `todo_list_manager.py` in `noah_plan_of_care_todo_mvp` uses an in-memory list as a database.
+**Category:** Backend Agents, Mock Data
+**Type:** Refactoring, Enhancement
+**Affected Files/Modules:** `noah_plan_of_care_todo_mvp/todo_list_manager.py`
+**Priority:** [P1] High (as this is a core agent MVP)
+**Status:** Open
+**Details:**
+    *   **`MOCK_TASKS_DB` list (line 5):**
+        *   **Mock:** In-memory list for storing To-Do task dictionaries.
+        *   **Represents:** Task database or an interface to a task management system.
+        *   **Potential Real Data Source(s)/API(s):** Firestore or AlloyDB.
+        *   **High-Level Integration Strategy:** Modify `add_task`, `get_all_tasks`, `update_task_status` to interact with the chosen database (Firestore or AlloyDB) using appropriate SDKs. Define data models/schemas. Configure DB connection and authentication.
+        *   **Conceptual Priority:** P0 - Critical (Core to plan of care / ToDo functionality).
+    *   All functions in this module operate on the `MOCK_TASKS_DB`.
+---
+
 ## II. Frontend Enhancements & Optimizations
 
 ### A. Services & State Management
