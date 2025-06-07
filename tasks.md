@@ -41,10 +41,9 @@ This section tracks the high-level development tasks for Project Noah MVP V1.0, 
     *   Sub-Item: API endpoint protection (authN) confirmed; authorization for self-access reviewed (gaps noted for `POST /patient_data` and full RBAC).
     *   Sub-Item: `HIPAA_MVP_Checklist.md` generated, documenting implemented safeguards and findings.
 
-*   Task 4.2: Essential Unit & Integration Tests - **IN PROGRESS (Unit Tests Complete)**
-    *   (Integration tests and testing strategy documentation are pending based on user feedback to switch tasks).
+*   Task 4.2: Essential Unit & Integration Tests - **COMPLETE (Testing Strategy Doc Pending)**
     *   Sub-Item: Unit tests for core agent logic (memory.py) written. **- COMPLETE**
-    *   Sub-Item: Integration tests for the main agent graph, verifying state transitions and tool integration. **- PENDING**
+    *   Sub-Item: Integration tests for the main agent graph, verifying state transitions and tool integration. **- COMPLETE**
     *   Sub-Item: Unit tests for critical Firestore service functions, LLM service, and RAG service written. **- COMPLETE**
     *   Sub-Item: Unit tests for API endpoints (chat, patient_data, history, user_profiles) and core security components written. **- COMPLETE**
 

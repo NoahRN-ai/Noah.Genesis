@@ -6,7 +6,7 @@ from datetime import datetime
 # and to reference enums or shared structures.
 from .firestore_models import (
     UserRole, PatientDataLogDataType, InteractionActor,
-    ToolCall as FirestoreToolCall,
+    ToolCall as FirestoreToolCall, # Using this alias for LLMOutput.tool_calls
     ToolResponse as FirestoreToolResponse
 )
 
@@ -117,3 +117,11 @@ class UserProfileResponse(BaseModel): # Based on FirestoreUserProfile structure
     model_config = {
         "from_attributes": True
     }
+
+class ErrorDetail(BaseModel):
+    detail: str
+    error_code: Optional[str] = None
+
+class LLMOutput(BaseModel):
+    text: Optional[str] = None
+    tool_calls: Optional[List[FirestoreToolCall]] = None # Reusing ToolCall from firestore_models (aliased)
