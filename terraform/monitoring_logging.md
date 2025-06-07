@@ -4,6 +4,8 @@ This document describes the logging export strategy and the initial Cloud Monito
 
 ## 1. Logging Exports (Sinks)
 
+The configuration for logging exports (sinks) utilizes several parameters defined as local variables within the `monitoring_logging.tf` file. These include `log_archive_bucket_name_suffix` (defaulting to an empty string), `log_archive_retention_period_days` (defaulting to 2190 days, or 6 years), `bigquery_log_dataset_id` (defaulting to "noah_mvp_logs_analysis"), and `bigquery_log_dataset_location` (defaulting to "US"). These defaults can be overridden if necessary.
+
 A dual-destination strategy is implemented for project logs to support both long-term archival and operational analysis:
 
 ### 1.1. Log Sink to Cloud Storage (`google_logging_project_sink.noah_mvp_gcs_log_sink`)
@@ -22,7 +24,7 @@ A dual-destination strategy is implemented for project logs to support both long
 ### 1.2. Log Sink to BigQuery (`google_logging_project_sink.noah_mvp_bq_log_sink`)
 
 *   **Purpose:** Facilitates advanced analysis, querying, and visualization of log data using SQL.
-*   **Destination Dataset:** `ds_noah_mvp_logs_analysis` (in project `google_project.noah_mvp_project.project_id`, location `var.bigquery_log_dataset_location` - default "US"). Created by Terraform.
+*   **Destination Dataset:** ID `var.bigquery_log_dataset_id` (default 'noah_mvp_logs_analysis') in project `google_project.noah_mvp_project.project_id`, location `var.bigquery_log_dataset_location` (default "US"). Created by Terraform.
 *   **Filter:** `severity >= INFO` (captures informational logs and higher). This focuses the analytical dataset on more significant events, potentially reducing BigQuery storage and query costs compared to exporting all logs.
 *   **Permissions:** The sink uses a unique `writer_identity` granted `roles/bigquery.dataEditor` on the destination dataset, allowing it to create tables and write log entries.
 *   **Table Partitioning:** Log exports to BigQuery automatically create date-partitioned tables, which is beneficial for query performance and cost management.

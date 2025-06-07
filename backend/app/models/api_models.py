@@ -6,15 +6,17 @@ from datetime import datetime
 # and to reference enums or shared structures.
 from .firestore_models import (
     UserRole, PatientDataLogDataType, InteractionActor,
-    ToolCall as FirestoreToolCall,
+    ToolCall as FirestoreToolCall, # Using this alias for LLMOutput.tool_calls
     ToolResponse as FirestoreToolResponse
 )
 
 # --- Chat API Models ---
 class ChatRequest(BaseModel):
-    user_query_text: str
+    user_query_text: str = Field(..., description="The text of the user's query.")
     user_voice_input_bytes: Optional[bytes] = None # Not used directly by LLM yet, for STT later
-    session_id: Optional[str] = None # Client can manage session IDs, or server can generate
+    session_id: Optional[str] = Field(None, description="The existing session ID, if any.")
+    # Add the new mode field
+    mode: str = Field("default", description="The chat mode to use (e.g., 'default', 'hippocrates').")
 
 class ChatResponse(BaseModel):
     agent_response_text: str
@@ -115,3 +117,11 @@ class UserProfileResponse(BaseModel): # Based on FirestoreUserProfile structure
     model_config = {
         "from_attributes": True
     }
+
+class ErrorDetail(BaseModel):
+    detail: str
+    error_code: Optional[str] = None
+
+class LLMOutput(BaseModel):
+    text: Optional[str] = None
+    tool_calls: Optional[List[FirestoreToolCall]] = None # Reusing ToolCall from firestore_models (aliased)

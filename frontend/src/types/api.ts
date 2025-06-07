@@ -15,6 +15,7 @@ export interface ChatRequestPayload {
   user_query_text: string;
   user_voice_input_bytes?: string; // Base64 encoded string if sending bytes
   session_id?: string | null;
+  mode?: string; // Add new mode field
 }
 
 export interface ChatResponsePayload {
